@@ -1,0 +1,32 @@
+{
+  "name": "open_evse",
+  "keywords": "Open EVSE library",
+  "description": "Firmware for Open EVSE",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/OpenEVSE/open_evse.git"
+  },
+  "authors":
+  [
+    {
+      "name": "lincomatic",
+      "maintainer": true
+    }
+  ],
+  "version": "8.2.3",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": [
+    {
+      "owner": "jeremypoulter",
+      "name": "Micro Debug",
+      "version": "^0.0.3"
+    },
+    {
+      "owner": "jeremypoulter",
+      "name": "StreamSpy",
+      "version": "^0.0.1"
+    }
+  ]
+}

@@ -32,7 +32,11 @@
 
 #include <inttypes.h>
 
-#include "./Wire.h"
+#ifdef OPEN_EVSE_LIB
+#include <Wire.h>
+#else
+#include "./_Wire.h"
+#endif
 #include "./I2CIO.h"
 
 // CLASS VARIABLES

@@ -15,6 +15,7 @@
 
 #pragma once
 
+#ifndef OPEN_EVSE_LIB
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #if defined(ARDUINO) && (ARDUINO >= 100)
@@ -182,3 +183,27 @@ public:
 //
 
 #endif // __cplusplus
+
+#else
+#include <Arduino.h>
+class DigitalPin {
+  uint8_t _pin;
+public:
+  enum PinMode { INP = INPUT, OUT = OUTPUT, INP_PU = INPUT_PULLUP };
+  DigitalPin(): _pin(NOT_A_PIN) {}
+  DigitalPin(volatile uint8_t* _reg, uint8_t idx, PinMode _mode) { init(_reg, idx, _mode); }
+
+  void init(volatile uint8_t* _reg, uint8_t idx, PinMode _mode) { _pin = idx; pinMode(_pin, _mode); }
+
+  void mode(PinMode mode) { pinMode(_pin, mode); }
+
+  uint8_t read() { return digitalRead(_pin); }
+  void write(uint8_t state) { digitalWrite(_pin, state); }
+};
+class AdcPin {
+  uint8_t _pin;
+public:
+  AdcPin(uint8_t pin) { _pin = pin; }
+  uint16_t read() { return analogRead(_pin); }
+};
+#endif

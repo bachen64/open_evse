@@ -28,7 +28,7 @@
 #else
  #include "WProgram.h"
 #endif
-#include "./Wire.h"
+#include "./_Wire.h"
 
 
 #include "./i2caddr.h"

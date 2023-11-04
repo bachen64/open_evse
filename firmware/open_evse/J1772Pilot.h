@@ -19,14 +19,14 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
+#include "avrstuff.h"
 typedef enum {
   PILOT_STATE_P12, PILOT_STATE_PWM, PILOT_STATE_N12
 }
 PILOT_STATE;
 class J1772Pilot {
   PILOT_STATE m_State;
-#ifndef PAFC_PWM
+#if !defined(PAFC_PWM) || defined(OPEN_EVSE_LIB)
   DigitalPin pin;
 #endif // !PAFC_PWM
 public:

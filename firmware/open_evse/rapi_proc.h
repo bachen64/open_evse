@@ -365,9 +365,11 @@ Z0 closems holdpwm
 
 #define RAPIVER "5.2.1"
 
+#ifndef OPEN_EVSE_LIB
 #define WIFI_MODE_AP 0
 #define WIFI_MODE_CLIENT 1
 #define WIFI_MODE_AP_DEFAULT 2
+#endif
 
 #define ESRAPI_BUFLEN 32
 #define ESRAPI_SOC '$' // start of command
@@ -444,11 +446,20 @@ public:
 };
 
 #ifdef RAPI_SERIAL
+#undef ESRP_PORT
+#ifndef OPEN_EVSE_LIB
+#define ESRP_PORT Serial
+#else //OPEN_EVSE_LIB
+#define ESRP_PORT StreamESRP
+#include "StreamPort.h"
+extern StreamPort StreamESRP;
+#endif//OPEN_EVSE_LIB
+
 class EvseSerialRapiProcessor : public EvseRapiProcessor {
-  int available() { return Serial.available(); }
-  int read() { return Serial.read(); }
-  int write(uint8_t u8) { return Serial.write(u8); }
-  int write(const char *str) { return Serial.write(str); }
+  int available() { return ESRP_PORT.available(); }
+  int read() { return ESRP_PORT.read(); }
+  int write(uint8_t u8) { return ESRP_PORT.write(u8); }
+  int write(const char *str) { return ESRP_PORT.write(str); }
 
 public:
   EvseSerialRapiProcessor();

@@ -1,7 +1,9 @@
+#ifndef OPEN_EVSE_LIB
 // Code by JeeLabs http://news.jeelabs.org/code/
 // Released to the public domain! Enjoy!
 
 // Simple general-purpose date/time class (no TZ / DST / leap second handling!)
+#include <Arduino.h>
 class DateTime {
 public:
     DateTime (uint32_t t =0);
@@ -30,3 +32,4 @@ public:
     uint8_t isrunning(void);
     static DateTime now();
 };
+#endif

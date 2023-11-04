@@ -1,7 +1,8 @@
+#ifndef OPEN_EVSE_LIB
 // Code by JeeLabs http://news.jeelabs.org/code/
 // Released to the public domain! Enjoy!
 
-#include "./Wire.h"
+#include "./_Wire.h"
 #include <avr/pgmspace.h>
 #include "RTClib.h"
 #include "i2caddr.h"
@@ -214,4 +215,5 @@ DateTime RTC_DS1307::now() {
   return DateTime (y, m, d, hh, mm, ss);
 }
 
+#endif
 #endif

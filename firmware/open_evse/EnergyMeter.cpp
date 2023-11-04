@@ -1,11 +1,15 @@
-#include "open_evse.h"
+#if defined(ENABLE_DEBUG) && !defined(ENABLE_DEBUG_ENERGY_METER)
+#undef ENABLE_DEBUG
+#endif
+
+#include "EnergyMeter.h"
 
 #ifdef KWH_RECORDING
 
-EnergyMeter g_EnergyMeter;
+AnalogEnergyMeter g_EnergyMeter;
 
 
-EnergyMeter::EnergyMeter()
+AnalogEnergyMeter::AnalogEnergyMeter()
 {
   m_bFlags = 0;
   m_wattSeconds = 0;
@@ -20,7 +24,7 @@ EnergyMeter::EnergyMeter()
   m_wattHoursTot = eeprom_read_dword((uint32_t*)EOFS_KWH_ACCUMULATED);
 }
 
-void EnergyMeter::Update()
+void AnalogEnergyMeter::Update()
 {
   // 1. charging session begins when EV is connected, ends when EV disconnected
   // 2. we record only when the relay is closed
@@ -55,11 +59,12 @@ void EnergyMeter::Update()
   else clrEvConnected();
 }
 
-void EnergyMeter::calcUsage()
+void AnalogEnergyMeter::calcUsage()
 {
   unsigned long curms = millis();
   unsigned long dms = curms - m_lastUpdateMs;
   if (dms > KWH_CALC_INTERVAL_MS) {
+#ifndef FAKE_CHARGING_CURRENT
       uint32_t mv = g_EvseController.GetVoltage();
       uint32_t ma = g_EvseController.GetChargingCurrent();
       /*
@@ -98,12 +103,12 @@ void EnergyMeter::calcUsage()
 #endif // THREEPHASE
       // convert milliwatt-seconds to watt-seconds and increment counter
       m_wattSeconds += mws / 1000;
-
+#endif // FAKE_CHARGING_CURRENT
       m_lastUpdateMs = curms;
   }
 }
 
-void EnergyMeter::startSession()
+void AnalogEnergyMeter::startSession()
 {
   endSession();
   m_wattSeconds = 0;
@@ -111,7 +116,7 @@ void EnergyMeter::startSession()
   setInSession();
 }
 
-void EnergyMeter::endSession()
+void AnalogEnergyMeter::endSession()
 {
   if (inSession()) {
     clrInSession();
@@ -122,9 +127,43 @@ void EnergyMeter::endSession()
   }
 }
 
-void EnergyMeter::SaveTotkWh()
+void AnalogEnergyMeter::SaveTotkWh()
 {
-  eeprom_write_dword((uint32_t*)EOFS_KWH_ACCUMULATED,m_wattHoursTot);
+  // only write to EEPROM if changed
+  if (eeprom_read_dword((uint32_t*)EOFS_KWH_ACCUMULATED) != m_wattHoursTot) {
+    eeprom_write_dword((uint32_t*)EOFS_KWH_ACCUMULATED,m_wattHoursTot);
+    DBUG("Write to EEPROM "); DBUGVAR(m_wattHoursTot);
+  }
+}
+
+void AnalogEnergyMeter::SetTotkWh(uint32_t whtot)
+{
+  // 2. we record only when the EM set energy total in Wh
+  if (inSession()) { // calc usage when EV is connected (in session)
+    m_wattSeconds = (whtot - m_wattHoursTot) * 3600;
+    DBUG("Calc "); DBUGVAR(m_wattSeconds);
+  }
+  else { // sync total kWh when EV not connected (not in session)
+    m_wattHoursTot = whtot;
+    DBUG("Sync "); DBUGVAR(m_wattHoursTot);
+  }
+}
+
+uint32_t AnalogEnergyMeter::GetTotkWh()
+{
+  // check again for unitialized eeprom condition so it can begin at 0kWh
+  if (eeprom_read_dword((uint32_t*)EOFS_KWH_ACCUMULATED) == 0xffffffff) {
+    // set the four bytes to zero just once in the case of unitialized eeprom
+    eeprom_write_dword((uint32_t*)EOFS_KWH_ACCUMULATED,0);
+  }
+
+  // if needed, get again the stored value for the kWh from eeprom
+  if (!m_wattHoursTot) {
+    m_wattHoursTot = eeprom_read_dword((uint32_t*)EOFS_KWH_ACCUMULATED);
+    DBUG("Read from EEPROM "); DBUGVAR(m_wattHoursTot);
+  }
+
+  return m_wattHoursTot;
 }
 
 #endif // KWH_RECORDING

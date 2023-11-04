@@ -22,28 +22,51 @@
  */
 #pragma once
 
+#include "avrstuff.h"
+
+// GFI module
+#define RCMB_CT             0
+#define RCMB_RCM14_01       1
+#define RCMB_RCM14_03       2
+#define RCMB_MC003E1_E1     3
+#define RCMB_MC003E3_C1     4
+#define RCMB_MC003E5_C1     5
+
+#ifndef GFI_MODULE
+#define GFI_MODULE          RCMB_CT
+#endif
+
 class Gfi {
   DigitalPin pin;
+#ifdef GFI_SELFTEST
+  DigitalPin pinTest;
+#endif // GFI_SELFTEST
+#ifdef ESP_CAL
+  DigitalPin pinCal;
+#endif
   uint8_t m_GfiFault;
 #ifdef GFI_SELFTEST
   uint8_t testSuccess;
   uint8_t testInProgress;
 #endif // GFI_SELFTEST
+  unsigned long curms;
 public:
+  Gfi()
+    : m_GfiFault(0)
 #ifdef GFI_SELFTEST
-  DigitalPin pinTest;
+    , testSuccess(0)
+    , testInProgress(0)
 #endif
-
-  Gfi() {}
+    , curms(0) {}
 
   void Init(uint8_t v6=0);
   void Reset();
-  void SetFault() { m_GfiFault = 1; }
-  uint8_t Fault() { return m_GfiFault; }
+  void SetFault();
+  uint8_t Fault();
 #ifdef GFI_SELFTEST
   uint8_t SelfTest();
-  void SetTestSuccess() { testSuccess = 1; }
-  uint8_t SelfTestSuccess() { return testSuccess; }
-  uint8_t SelfTestInProgress() { return testInProgress; }
+  void SetTestSuccess();
+  uint8_t SelfTestSuccess();
+  uint8_t SelfTestInProgress();
 #endif
 };

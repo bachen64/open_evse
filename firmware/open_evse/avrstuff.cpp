@@ -1,3 +1,4 @@
+#ifndef OPEN_EVSE_LIB
 // Copyright (C) 2015 Sam C. Lin
 //
 // This program is free software: you can redistribute it and/or modify
@@ -105,3 +106,4 @@ uint16_t AdcPin::read()
   // combine the two bytes
   return (high << 8) | low;
 }
+#endif

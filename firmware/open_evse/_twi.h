@@ -1,3 +1,4 @@
+#ifndef OPEN_EVSE_LIB
 /*
   twi.h - TWI/I2C library for Wiring & Arduino
   Copyright (c) 2006 Nicholas Zambetti.  All right reserved.
@@ -33,7 +34,7 @@
   #define TWI_MTX   2
   #define TWI_SRX   3
   #define TWI_STX   4
-  
+
   void twi_init(void);
   void twi_setAddress(uint8_t);
   uint8_t twi_readFrom(uint8_t, uint8_t*, uint8_t, uint8_t);
@@ -46,4 +47,4 @@
   void twi_releaseBus(void);
 
 #endif
-
+#endif//OPEN_EVSE_LIB

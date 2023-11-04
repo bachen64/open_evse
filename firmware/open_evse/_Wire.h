@@ -1,3 +1,4 @@
+#ifndef OPEN_EVSE_LIB
 /*
   TwoWire.h - TWI/I2C library for Arduino & Wiring
   Copyright (c) 2006 Nicholas Zambetti.  All right reserved.
@@ -78,3 +79,4 @@ extern TwoWire Wire;
 
 #endif
 
+#endif//OPEN_EVSE_LIB

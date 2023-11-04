@@ -28,18 +28,24 @@
 #include "WProgram.h" // shouldn't need this but arduino sometimes messes up and puts inside an #ifdef
 #endif // ARDUINO
 #include "open_evse.h"
+#include "_strings.h"
 
 #ifdef RAPI
 const char RAPI_VER[] PROGMEM = RAPIVER;
 
 
+#ifndef OPEN_EVSE_LIB
 #ifdef MCU_ID_LEN
 // mcuid *must* be of size MCU_ID_LEN
 #include <avr/boot.h>
 void getMcuId(uint8_t *mcuid)
 {
   for (int i=0;i < MCU_ID_LEN;i++) {
-    mcuid[i] = boot_signature_byte_get(0x0E + i);
+#if defined(__LGT8F__)
+    mcuid[i] = *(uint8_t *)(&GUID0 + i);
+#else // __AVR_ATmega328P__ || __AVR_ATmega328PB__
+    mcuid[i] = boot_signature_byte_get(0x0E + i + (MCU_ID_LEN == 9 && i > 5 ? 1 : 0));
+#endif // __AVR_ATmega328P__ || __AVR_ATmega328PB__
   }
 }
 #endif // MCU_ID_LEN
@@ -70,6 +76,14 @@ uint8_t htou8(const char *s)
   }
   return u;
 }
+
+#else //OPEN_EVSE_LIB
+extern uint8_t htou8(const char *s);
+
+void getMcuId(uint8_t *mcuid)
+{
+}
+#endif//OPEN_EVSE_LIB
 
 // convert decimal string to uint32_t
 uint32_t dtou32(const char *s)
@@ -238,12 +252,12 @@ int EvseRapiProcessor::tokenize(char *buf)
 }
 
 uint8_t g_inRapiCommand = 0;
-int EvseRapiProcessor::processCmd()
+int EvseRapiProcessor::processCmd() // response default to "NOK", this means rc=-1, bufCnt=0
 {
   g_inRapiCommand = 1;
 
   UNION4B u1,u2,u3,u4;
-  int rc = -1;
+  int rc = -1; // -1 = response "NOK", 0 = response "OK"
 
 #ifdef RAPI_SENDER
   // throw away extraneous responses that we weren't expecting
@@ -262,7 +276,7 @@ int EvseRapiProcessor::processCmd()
   }
 
   // we use bufCnt as a flag in response() to signify data to write
-  bufCnt = 0;
+  bufCnt = 0; // 0 = response "[rc]", 1 = response "[rc] ..."
 
   char *s = tokens[0];
   switch(*(s++)) {
@@ -272,7 +286,7 @@ int EvseRapiProcessor::processCmd()
       if (tokenCnt == 2) {
 	g_OBD.DisableUpdate((*tokens[1] == '0') ? 1 : 0);
 	if (*tokens[1] != '0') g_OBD.Update(OBD_UPD_FORCE);
-	rc = 0;
+	rc = 0; // OK, bufCnt=0
       }
       break;
  #ifdef BTN_MENU
@@ -282,6 +296,20 @@ int EvseRapiProcessor::processCmd()
       rc = 0;
       break;
 #endif // BTN_MENU
+#ifdef AMMETER
+    case '2': // F2 1/0 enable/disable CT read current
+      if (tokenCnt == 2) {
+#ifdef CURRENT_PIN // CT present
+        if (*tokens[1] == '0') {
+          // disable
+        } else {
+          // enable
+        }
+#endif
+        rc = 0;
+      }
+      break;
+#endif
 #ifdef LCD16X2
     case 'B': // LCD backlight
       if (tokenCnt == 2) {
@@ -335,7 +363,7 @@ int EvseRapiProcessor::processCmd()
 	    g_EvseController.EnableVentReq(u1.u8);
 	    break;
 	  default: // unknown
-	    rc = -1;
+	    rc = -1; // NOK
 	  }
 	}
       }
@@ -504,11 +532,12 @@ int EvseRapiProcessor::processCmd()
       break;
 #endif // CHARGE_LIMIT
 #ifdef KWH_RECORDING
-    case 'K': // set accumulated kwh
-      g_EnergyMeter.SetTotkWh(dtou32(tokens[1]));
+    case 'K': { // set accumulated kwh
+      uint32_t whtot = dtou32(tokens[1]); // unit Wh
+      g_EnergyMeter.SetTotkWh(whtot);
       g_EnergyMeter.SaveTotkWh();
       rc = 0;
-      break;
+    } break;
 #endif //KWH_RECORDING
     case 'L': // service level
       if (tokenCnt == 2) {
@@ -719,9 +748,12 @@ int EvseRapiProcessor::processCmd()
       rc = 0;
       break;
 #endif // CHARGE_LIMIT
-#ifdef MCU_ID_LEN
     case 'I': // get MCU ID
       {
+#ifndef MCU_ID_LEN
+        extern String serial;
+        sprintf(buffer, serial.c_str());
+#else // MCU_ID_LEN
         uint8_t mcuid[MCU_ID_LEN];
         getMcuId(mcuid);
         char *s = buffer;
@@ -733,11 +765,11 @@ int EvseRapiProcessor::processCmd()
           sprintf(s,"%02X",mcuid[i]);
           s += 2;
         }
+#endif // MCU_ID_LEN
         bufCnt = 1; // flag response text output
         rc = 0;
       }
       break;
-#endif // MCU_ID_LEN
 #ifdef VOLTMETER
     case 'M':
       u1.i = g_EvseController.GetVoltScaleFactor();
@@ -789,11 +821,11 @@ int EvseRapiProcessor::processCmd()
       break;
 #endif // RTC
 #ifdef KWH_RECORDING
-    case 'U':
+    case 'U': { // get Wattseconds Whacc
       sprintf(buffer,"%lu %lu",g_EnergyMeter.GetSessionWs(),g_EnergyMeter.GetTotkWh());
       bufCnt = 1;
       rc = 0;
-      break;
+    } break;
 #endif // KWH_RECORDING
     case 'V': // get version
       GetVerStr(buffer);
@@ -818,17 +850,63 @@ int EvseRapiProcessor::processCmd()
   case 'T': // testing op
     switch(*s) {
 #ifdef FAKE_CHARGING_CURRENT
-    case '0': // set fake charging current
-      if (tokenCnt == 2) {
-	g_EvseController.SetChargingCurrent(dtou32(tokens[1])*1000);
-	g_OBD.SetAmmeterDirty(1);
-	g_OBD.Update(OBD_UPD_FORCE);
-	rc = 0;
+    case '0': // set fake charging current in mA
+      if (tokenCnt == 2 || (tokenCnt == 3 && dtou32(tokens[2]) == 1)) { // e.g. '$T0 amps' or '$T0 amps 1'
+        g_EvseController.SetChargingCurrent(dtou32(tokens[1]));
+        g_OBD.SetAmmeterDirty(1);
+        g_OBD.Update(OBD_UPD_FORCE);
+        rc = 0;
+      }
+      else if (tokenCnt == 3 && dtou32(tokens[2]) == 2) {               // e.g. '$T0 amps 2'
+        g_EvseController.SetChargingCurrent2(dtou32(tokens[1]));        // charging current L2
+        rc = 0; // ERR = 0
+      }
+      else if (tokenCnt == 3 && dtou32(tokens[2]) == 3) {               // e.g. '$T0 amps 3'
+        g_EvseController.SetChargingCurrent3(dtou32(tokens[1]));        // charging current L3
+        rc = 0; // ERR = 0
+      }
+      else if (tokenCnt == 4) {                                         // e.g. '$T0 amps1 amps2 amps3'
+        g_EvseController.SetChargingCurrent(dtou32(tokens[1]));         // charging current L1
+        g_EvseController.SetChargingCurrent2(dtou32(tokens[2]));        // charging current L2
+        g_EvseController.SetChargingCurrent3(dtou32(tokens[3]));        // charging current L3
+        rc = 0; // ERR = 0
+      }
+      else {
+        rc = 1; // ERR = 1
+      }
+      if (!rc) {  // no err
+        g_OBD.SetAmmeterDirty(1);
+        g_OBD.Update(OBD_UPD_FORCE);
       }
       break;
 #endif // FAKE_CHARGING_CURRENT
-    }
-    break;
+    case '1': // set accumulated kwh, same as "$SK wh"
+      if (tokenCnt == 2) {
+        uint32_t whtot = dtou32(tokens[1]); // unit Wh
+        g_EnergyMeter.SetTotkWh(whtot);
+        g_EnergyMeter.SaveTotkWh();
+        rc = 0;
+      }
+      break;
+    case '2': // get amps of L1 L2 L3 that are readed from installed CTs (v5.2.3)
+      if (tokenCnt == 1) {
+        u1.i32 = g_EvseController.GetChargingCurrent();
+        u2.i32 = g_EvseController.GetChargingCurrent2();
+        u3.i32 = g_EvseController.GetChargingCurrent3();
+        sprintf(buffer,"%ld %ld %ld",u1.i32,u2.i32,u3.i32);
+        bufCnt = 1; // flag response text output
+        rc = 0;
+      }
+      break;
+#if defined(KWH_RECORDING) && !defined(VOLTMETER)
+    case '3': // set voltage, same as "$SV mv"
+      if (tokenCnt == 2 || (tokenCnt == 3 && dtou32(tokens[2]) == 1)) { // e.g. '$T3 mv' or '$T0 mv 1'
+        g_EvseController.SetMV(dtou32(tokens[1]));
+	      rc = 0;
+      }
+      break;
+#endif //defined(KWH_RECORDING) && !defined(VOLTMETER)
+    } break;
 #endif //RAPI_T_COMMANDS
 #if defined(RELAY_HOLD_DELAY_TUNING)
   case 'Z': // reserved op

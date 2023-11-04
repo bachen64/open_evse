@@ -22,7 +22,7 @@
  * Boston, MA 02111-1307, USA.
  */
 #pragma once
-
+#include "avrstuff.h"
 class MennekesLock {
   int8_t isLocked;
   DigitalPin pinA;

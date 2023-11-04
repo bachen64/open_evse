@@ -41,14 +41,78 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+#ifndef OPEN_EVSE_LIB
 #include <avr/io.h>
 #include <avr/eeprom.h>
 #include <avr/wdt.h>
 #include <avr/pgmspace.h>
 #include <pins_arduino.h>
-#include "./Wire.h"
+#include "./_Wire.h"
 #include "./RTClib.h"
 #include "open_evse.h"
+
+#else
+#include <EEPROM.h>
+#include <Wire.h>
+#include "open_evse.h"
+
+// from src/app_config.cpp
+#define EEPROM_SIZE       4096
+#define SETTING_OFFSET    3584
+#define SETTING_SIZE      512
+static uint8_t setting[SETTING_SIZE];
+
+static void eeprom_init() {
+  EEPROM.begin(EEPROM_SIZE);
+  DBUGF("Got %d from EEPROM @ %d", SETTING_SIZE, SETTING_OFFSET);
+  for(size_t i = 0; i < SETTING_SIZE; i++) {
+    setting[i] = EEPROM.read(SETTING_OFFSET + i);
+  }
+  EEPROM.end();
+}
+uint8_t eeprom_read_byte(uint8_t *p) {
+  uint8_t v;
+  memcpy(&v, setting + (int)p, sizeof(v));
+  return v;
+}
+void eeprom_write_byte(uint8_t *p, uint8_t val) {
+  if (eeprom_read_byte(p) == val) return;
+  uint8_t v = val;
+  memcpy(setting + (int)p, &v, sizeof(v));
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.writeByte(SETTING_OFFSET + (int)p, v);
+  EEPROM.end();
+  DBUGF("BYTE %02X written to EEPROM @ (%d + %d)", v, SETTING_OFFSET, (int)p);
+}
+uint16_t eeprom_read_word(uint16_t *p) {
+  uint16_t v;
+  memcpy(&v, setting + (int)p, sizeof(v));
+  return v;
+}
+void eeprom_write_word(uint16_t *p, uint16_t val) {
+  if (eeprom_read_word(p) == val) return;
+  uint16_t v = val;
+  memcpy(setting + (int)p, &v, sizeof(v));
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.writeUShort(SETTING_OFFSET + (int)p, v);
+  EEPROM.end();
+  DBUGF("WORD %04X written to EEPROM @ (%d + %d)", v, SETTING_OFFSET, (int)p);
+}
+uint32_t eeprom_read_dword(uint32_t *p) {
+  uint32_t v;
+  memcpy(&v, setting + (int)p, sizeof(v));
+  return v;
+}
+void eeprom_write_dword(uint32_t *p, uint32_t val) {
+  if (eeprom_read_dword(p) == val) return;
+  uint32_t v = val;
+  memcpy(setting + (int)p, &v, sizeof(v));
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.writeULong(SETTING_OFFSET + (int)p, v);
+  EEPROM.end();
+  DBUGF("DWORD %08X written to EEPROM @ (%d + %d)", v, SETTING_OFFSET, (int)p);
+}
+#endif
 
 // if using I2CLCD_PCF8574 uncomment below line  and comment out LiquidTWI2.h above
 //#include "./LiquidCrystal_I2C.h"
@@ -249,6 +313,7 @@ char *u2a(unsigned long x,int8_t digits)
   return s;
 }
 
+#ifndef OPEN_EVSE_LIB
 // wdt_init turns off the watchdog timer after we use it
 // to reboot
 
@@ -260,7 +325,7 @@ void wdt_init(void)
 
   return;
 }
-
+#endif
 
 #ifdef TEMPERATURE_MONITORING
 
@@ -349,6 +414,22 @@ OnboardDisplay::OnboardDisplay()
 }
 
 
+#ifdef OPEN_EVSE_LIB
+// define custom characters/arrays - every character is 5x8 "pixels"
+const char gauge_empty[8]  PROGMEM = {B11111, B00000, B00000, B00000, B00000, B00000, B00000, B11111};      // empty middle piece
+const char gauge_fill_1[8] PROGMEM = {B11111, B10000, B10000, B10000, B10000, B10000, B10000, B11111};      // filled gauge - 1 column
+const char gauge_fill_2[8] PROGMEM = {B11111, B11000, B11000, B11000, B11000, B11000, B11000, B11111};      // filled gauge - 2 columns
+const char gauge_fill_3[8] PROGMEM = {B11111, B11100, B11100, B11100, B11100, B11100, B11100, B11111};      // filled gauge - 3 columns
+const char gauge_fill_4[8] PROGMEM = {B11111, B11110, B11110, B11110, B11110, B11110, B11110, B11111};      // filled gauge - 4 columns
+const char gauge_fill_5[8] PROGMEM = {B11111, B11111, B11111, B11111, B11111, B11111, B11111, B11111};      // filled gauge - 5 columns
+const char gauge_left[8]   PROGMEM = {B11111, B10000, B10000, B10000, B10000, B10000, B10000, B11111};      // left part of gauge - empty
+const char gauge_right[8]  PROGMEM = {B11111, B00001, B00001, B00001, B00001, B00001, B00001, B11111};      // right part of gauge - empty
+
+const char gauge_mask_left[8]  PROGMEM = {B01111, B11111, B11111, B11111, B11111, B11111, B11111, B01111};  // mask for rounded corners for leftmost character
+const char gauge_mask_right[8] PROGMEM = {B11110, B11111, B11111, B11111, B11111, B11111, B11111, B11110};  // mask for rounded corners for rightmost character
+
+const char warning_icon[8] PROGMEM = {B00100, B00100, B01110, B01010, B11011, B11111, B11011, B11111};      // warning icon
+#endif
 #if defined(DELAYTIMER)
 const char CustomChar_6[8] PROGMEM = {0x0,0xe,0x15,0x17,0x11,0xe,0x0,0x0}; // clock
 #endif
@@ -411,10 +492,20 @@ void OnboardDisplay::Init()
   SetRedLed(0);
 #endif
 
+  Wire.beginTransmission(LCD_I2C_ADDR);
+  if (Wire.endTransmission() == 0) {
+    DEBUG.println(F("LCD started"));
+  } else {
+    m_bFlags |= OBDF_NO_LCD;
+    DEBUG.println(F("LCD not started"));
+    return;
+  }
+
 #ifdef LCD16X2
   LcdBegin(LCD_MAX_CHARS_PER_LINE, 2);
   LcdSetBacklightColor(WHITE);
 
+#ifndef OPEN_EVSE_LIB
 #if defined(DELAYTIMER)
   MakeChar(0,CustomChar_6);
 #endif
@@ -431,6 +522,14 @@ void OnboardDisplay::Init()
 #ifdef TIME_LIMIT
   MakeChar(5,CustomChar_5);
 #endif // TIME_LIMIT
+#else
+  MakeChar(7, gauge_empty);   // middle empty gauge
+  MakeChar(1, gauge_fill_1);  // filled gauge - 1 column
+  MakeChar(2, gauge_fill_2);  // filled gauge - 2 column
+  MakeChar(3, gauge_fill_3);  // filled gauge - 3 column
+  MakeChar(4, gauge_fill_4);  // filled gauge - 4 column
+  MakeChar(0, warning_icon);  // warning icon
+#endif
   m_Lcd.clear();
 
 #ifdef OPENEVSE_2
@@ -438,11 +537,11 @@ void OnboardDisplay::Init()
 #else
   LcdPrint_P(0,PSTR("Open EVSE"));
 #endif
-  LcdPrint_P(0,1,PSTR("Ver. "));
+  LcdPrint_P(0,1,PSTR("V"));
   LcdPrint_P(VERSTR);
   wdt_delay(1500);
   WDT_RESET();
-#endif //#ifdef LCD16X2
+#endif
 }
 
 #ifdef LCD16X2
@@ -501,6 +600,81 @@ void OnboardDisplay::LcdMsg(const char *l1,const char *l2)
   LcdPrint(0,l1);
   LcdPrint(1,l2);
 }
+
+#ifdef OPEN_EVSE_LIB
+void OnboardDisplay::showProgressBar(int y, int progress)
+{
+  // convert progress (%) to pixel width, every character is 5px wide, we have 80 pixels per line
+  int value_in_pixels = round(progress * (float)(LCD_MAX_CHARS_PER_LINE*5.F/100.F));
+
+  // 0=not set, 1=tip in first char, 2=tip in middle, 3=tip in last char
+  int tip_position = 0;
+  if (value_in_pixels < 5) {
+    tip_position = 1; // tip is inside the first character
+  } else if (value_in_pixels > LCD_MAX_CHARS_PER_LINE*5-5) {
+    tip_position = 3; // tip is inside the last character
+  } else {
+    tip_position = 2; // tip is somewhere in the middle
+  }
+
+  // value for offseting the pixels for the smooth filling
+  int move_offset = 4 - ((value_in_pixels - 1) % 5);
+
+  // left part of progress bar dynamic
+  byte gauge_dynamic[8];
+  // dynamically create left part of the progress bar
+  for (int i = 0; i < 8; i++) {
+    if (tip_position == 1) {
+      // tip on the first character
+      gauge_dynamic[i] = (pgm_read_byte(gauge_fill_5+i) << move_offset) | pgm_read_byte(gauge_left+i);
+    } else {
+      // tip not on the first character
+      gauge_dynamic[i] = pgm_read_byte(gauge_fill_5+i);
+    }
+    // apply mask for rounded corners
+    gauge_dynamic[i] &= pgm_read_byte(gauge_mask_left+i);
+  }
+  // create custom character for the left part of the progress bar
+  m_Lcd.createChar(5, gauge_dynamic);
+
+  // right part of progress bar dynamic
+  // dynamically create right part of the progress bar
+  for (int i = 0; i < 8; i++) {
+    if (tip_position == 3) {
+      // tip on the last character
+      gauge_dynamic[i] = (pgm_read_byte(gauge_fill_5+i) << move_offset) | pgm_read_byte(gauge_right+i);
+    } else {
+      // tip not on the last character
+      gauge_dynamic[i] = pgm_read_byte(gauge_right+i);
+    }
+    // apply mask for rounded corners
+    gauge_dynamic[i] &= pgm_read_byte(gauge_mask_right+i);
+  }
+  // create custom character for the right part of the progress bar
+  m_Lcd.createChar(6, gauge_dynamic);
+
+  // set all the characters for the progress bar
+  for (int i = 0; i < LCD_MAX_CHARS_PER_LINE; i++) {
+    if (i == 0) {                               // first character = custom left piece
+      m_strBuf[i] = byte(5);
+    } else if (i == LCD_MAX_CHARS_PER_LINE-1) { // last character = custom right piece
+      m_strBuf[i] = byte(6);
+    } else {                                    // character in the middle, could be empty, tip or fill
+      if (value_in_pixels <= i*5) {
+        m_strBuf[i] = byte(7);                  // empty character
+      } else if (value_in_pixels > i*5 && value_in_pixels < (i+1)*5) {
+        m_strBuf[i] = byte(5 - move_offset);    // tip
+      } else {
+        m_strBuf[i] = byte(255);                // filled character
+      }
+    }
+  }
+
+  // gauge drawing
+  m_Lcd.setCursor(0, y);  // move the cursor to the next line
+  m_Lcd.print(m_strBuf);  // display the gauge
+}
+#endif
 #endif // LCD16X2
 
 
@@ -550,14 +724,14 @@ void OnboardDisplay::Update(int8_t updmode)
       g_DelayTimer.PrintTimerIcon();
 #endif //#ifdef DELAYTIMER
       LcdPrint_P(g_psReady);
-      LcdPrint(10,0,g_sTmp);
-      
+      LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),0,g_sTmp);
+
 #ifdef KWH_RECORDING 
       sprintf(g_sTmp,STRF_WH,(g_EnergyMeter.GetSessionWs() / 3600) );
       LcdPrint(0,1,g_sTmp);
       
       sprintf(g_sTmp,STRF_KWH,(g_EnergyMeter.GetTotkWh() / 1000));  // display accumulated kWh
-      LcdPrint(7,1,g_sTmp);
+      LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),1,g_sTmp);
 #endif // KWH_RECORDING
       
 #endif //Adafruit RGB LCD
@@ -602,7 +776,7 @@ void OnboardDisplay::Update(int8_t updmode)
       LcdPrint(0,1,g_sTmp);
       
       sprintf(g_sTmp,STRF_KWH,(g_EnergyMeter.GetTotkWh() / 1000));  // display accumulated kWh
-      LcdPrint(7,1,g_sTmp);
+      LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),1,g_sTmp);
 #endif // KWH_RECORDING
       
 #endif //Adafruit RGB LCD
@@ -675,7 +849,7 @@ void OnboardDisplay::Update(int8_t updmode)
       SetRedLed(1);
 #ifdef LCD16X2 //Adafruit RGB LCD
       LcdSetBacklightColor(RED);
-      LcdMsg_P(g_psSvcReq,g_psTemperatureFault);  //  SERVICE REQUIRED     OVER TEMPERATURE 
+      LcdMsg_P(g_psSvcReq,g_psTemperatureFault);  //  SERVICE REQUIRED     OVER TEMPERATURE
 #endif
       break;
 #endif //TEMPERATURE_MONITORING        
@@ -738,7 +912,7 @@ void OnboardDisplay::Update(int8_t updmode)
       }
 #endif // AUTH_LOCK
       LcdPrint_P(g_psDisabled);
-      LcdPrint(10,0,g_sTmp);
+      LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),0,g_sTmp);
 #endif // LCD16X2
       break;
 #ifdef GFI_SELFTEST
@@ -764,7 +938,7 @@ void OnboardDisplay::Update(int8_t updmode)
       }
 #endif // AUTH_LOCK
       LcdPrint_P(g_psSleeping);
-      LcdPrint(10,0,g_sTmp);
+      LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),0,g_sTmp);
 #endif // LCD16X2
       break;
     default:
@@ -863,35 +1037,35 @@ void OnboardDisplay::Update(int8_t updmode)
 
 #ifdef VOLTMETER
       sprintf(g_sTmp,STRF_VOLT,(g_EvseController.GetVoltage() / 1000));  // Display voltage from OpenEVSE II
-      LcdPrint(11,1,g_sTmp);
+      LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),1,g_sTmp);
 #else
       sprintf(g_sTmp,STRF_KWH,(g_EnergyMeter.GetTotkWh() / 1000));  // display accumulated kWh
-      LcdPrint(7,1,g_sTmp);
+      LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),1,g_sTmp);
 #endif // VOLTMETER
 #endif // KWH_RECORDING
 
 #ifdef TEMPERATURE_MONITORING
       if ((g_TempMonitor.OverTemperature()) || TEMPERATURE_DISPLAY_ALWAYS)  {
 	g_OBD.LcdClearLine(1);
-	const char *tempfmt = "%2d.%1dC";
+	const char *tempfmt = "%2d.%1dC"; (void)tempfmt;
 #ifdef MCP9808_IS_ON_I2C
-	if ( g_TempMonitor.m_MCP9808_temperature != TEMPERATURE_NOT_INSTALLED) {   
+	if ( g_TempMonitor.m_MCP9808_temperature != TEMPERATURE_NOT_INSTALLED) {
 	  sprintf(g_sTmp,tempfmt,g_TempMonitor.m_MCP9808_temperature/10, abs(g_TempMonitor.m_MCP9808_temperature % 10));  //  Ambient sensor near or on the LCD
 	  LcdPrint(0,1,g_sTmp);
 	}
 #endif
 
-#ifdef RTC	
+#if defined(RTC) || (!defined(RTC) && defined(OPEN_EVSE_LIB))
 	if ( g_TempMonitor.m_DS3231_temperature != TEMPERATURE_NOT_INSTALLED) {
 	  sprintf(g_sTmp,tempfmt,g_TempMonitor.m_DS3231_temperature/10, abs(g_TempMonitor.m_DS3231_temperature % 10));      //  sensor built into the DS3231 RTC Chip
-	  LcdPrint(5,1,g_sTmp);
+	  LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),1,g_sTmp);
 	}
 #endif
 	
 #ifdef TMP007_IS_ON_I2C
 	if ( g_TempMonitor.m_TMP007_temperature != TEMPERATURE_NOT_INSTALLED ) {
 	  sprintf(g_sTmp,tempfmt,g_TempMonitor.m_TMP007_temperature/10, abs(g_TempMonitor.m_TMP007_temperature % 10));  //  Infrared sensor probably looking at 30A fuses
-	  LcdPrint(11,1,g_sTmp);
+	  LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),1,g_sTmp);
 	}
 #endif
 
@@ -954,15 +1128,15 @@ void OnboardDisplay::Update(int8_t updmode)
 	LcdWrite(2);
 	LcdWrite(6);
 	sprintf(g_sTmp,g_sHHMMfmt,g_DelayTimer.GetStartTimerHour(),g_DelayTimer.GetStartTimerMin());
-	LcdPrint(11,0,g_sTmp);
+	LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),0,g_sTmp);
 	LcdSetCursor(9,1);
 	LcdWrite(1);
 	LcdWrite(6);
 	sprintf(g_sTmp,g_sHHMMfmt,g_DelayTimer.GetStopTimerHour(),g_DelayTimer.GetStopTimerMin());
-	LcdPrint(11,1,g_sTmp);
+	LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),1,g_sTmp);
       } else {
 	sprintf(g_sTmp,g_sRdyLAstr,(int)svclvl,currentcap);
-	LcdPrint(10,0,g_sTmp);
+	LcdPrint(LCD_MAX_CHARS_PER_LINE-strlen(g_sTmp),0,g_sTmp);
       }
     }
 #endif // DELAYTIMER
@@ -2424,8 +2598,14 @@ void ProcessInputs()
 
 void EvseReset()
 {
+#ifndef OPEN_EVSE_LIB
   Wire.begin();
+#endif
   g_OBD.Init();
+
+#ifdef OPEN_EVSE_LIB
+  eeprom_init();
+#endif
 
 #ifdef RAPI
   RapiInit();
@@ -2453,7 +2633,7 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
     // be absolutely sure that the PP pin has firm contact by the time we
     // get here
     if (g_ACCController.AutoSetCurrentCapacity()) {
-      // invalid PP so 0 amps - force to stay in State A
+      DBUGLN("Invalid PP state - force to stay in State A");
       retEvseState = EVSE_STATE_A;
     }
   }
@@ -2470,14 +2650,21 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
 }
 #endif //PP_AUTO_AMPACITY
 
-
+#ifndef OPEN_EVSE_LIB
 void setup()
+#else
+void open_evse_setup()
+#endif
 {
+#ifndef OPEN_EVSE_LIB
   wdt_disable();
   
   delay(400);  // give I2C devices time to be ready before running code that wants to initialize I2C devices.  Otherwise a hang can occur upon powerup.
   
   Serial.begin(SERIAL_BAUD);
+#else
+  WDT_RESET();
+#endif
 
 #ifdef BTN_MENU
   g_BtnHandler.init();
@@ -2492,24 +2679,45 @@ void setup()
   g_TempMonitor.Init();
 #endif
 
-  
-
+#ifndef OPEN_EVSE_LIB
 #ifdef BOOTLOCK
-#ifdef LCD16X2
-  g_OBD.LcdMsg_P(PSTR("Waiting for"),PSTR("Initialization.."));
-#endif // LCD16X2
+  #ifdef LCD16X2
+  g_OBD.LcdMsg_P(PSTR("* WAITING FOR  *"),PSTR(">INITIALIZATION<"));
+  #endif // LCD16X2
   while (g_EvseController.IsBootLocked()) {
     ProcessInputs();
   }
 #endif // BOOTLOCK
 
+  WDT_ENABLE(WATCHDOG_TIMEOUT);
+#endif
+}
 
-  WDT_ENABLE();
-}  // setup()
-
-
+#ifndef OPEN_EVSE_LIB
 void loop()
+#else
+void open_evse_loop()
+#endif
 {
+#ifdef OPEN_EVSE_LIB
+  // comes from HardFault()
+  if (g_EvseController.InHardFault()) // replaced while()
+  {
+    ProcessInputs(); // spin forever or until user resets via menu
+    // if pilot not in N12 state, we can recover from the hard fault when EV
+    // is unplugged
+    if (g_EvseController.PilotGetState() != PILOT_STATE_N12) {
+      g_EvseController.ReadPilot(); // update EV connect state
+      if (!g_EvseController.EvConnected() && g_EvseController.Recoverable()) {
+        // EV disconnected - cancel fault
+        g_EvseController.SetEvseState(EVSE_STATE_UNKNOWN);
+        g_EvseController.ClrHardFault(); // replaced break;
+      }
+    }
+    return; // replaced ;
+  }
+  ; // replaced ClrHardFault();
+#endif
   WDT_RESET();
 
   g_EvseController.Update();

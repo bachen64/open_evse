@@ -1,13 +1,14 @@
 // -*- C++ -*-
 #pragma once
 
+#include "open_evse.h"
 
 #ifdef KWH_RECORDING
 // m_bFlags
 #define EMF_IN_SESSION 0x01 // in a charging session
 #define EMF_EV_CONNECTED 0x02
 #define EMF_RELAY_CLOSED 0x04
-class EnergyMeter {
+class AnalogEnergyMeter {
   unsigned long m_lastUpdateMs;
   uint32_t m_wattHoursTot; // accumulated across all charging sessions
   uint32_t m_wattSeconds;  // current charging session
@@ -31,17 +32,17 @@ class EnergyMeter {
   void endSession();
 
 public:
-  EnergyMeter();
+  AnalogEnergyMeter();
 
   void Update();
   void SaveTotkWh();
-  void SetTotkWh(uint32_t whtot) { m_wattHoursTot = whtot; }
-  uint32_t GetTotkWh() { return m_wattHoursTot; }
+  void SetTotkWh(uint32_t whtot);
+  uint32_t GetTotkWh();
   uint32_t GetSessionWs() { return m_wattSeconds; }
 };
 
 
-extern EnergyMeter g_EnergyMeter;
+extern AnalogEnergyMeter g_EnergyMeter;
 #endif // KWH_RECORDING
 
 

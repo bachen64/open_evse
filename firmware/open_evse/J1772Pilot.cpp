@@ -1,3 +1,7 @@
+#if defined(ENABLE_DEBUG) && !defined(ENABLE_DEBUG_J1772PILOT)
+#undef ENABLE_DEBUG
+#endif
+
 /*
  * This file is part of Open EVSE.
  *
@@ -20,7 +24,7 @@
  */
 #include "open_evse.h"
 
-
+#ifndef OPEN_EVSE_LIB
 #define TOP ((F_CPU / 2000000) * 1000) // for 1KHz (=1000us period)
 
 void J1772Pilot::Init()
@@ -145,3 +149,61 @@ int J1772Pilot::SetPWM(int amps)
   }
 #endif // PAFC_PWM
 }
+
+#else
+void J1772Pilot::Init()
+{
+  pin.init(NULL,PILOT_PWM,DigitalPin::OUT);
+  pin.write(0);
+
+  if (!ledcSetup(/*channel*/0, 1000/*Hz*/, 10/*-bit*/)) {
+    DBUGLN("No more LEDC channels available or LEDC timer config failed!");
+    return;
+  }
+  ledcAttachPin(PILOT_PWM, /*channel*/0);
+
+  SetState(PILOT_STATE_P12); // turns the pilot on 12V steady state
+}
+
+void J1772Pilot::SetState(PILOT_STATE state)
+{
+  uint32_t duty = (state == PILOT_STATE_P12) ? 1023 : 0;
+  ledcWrite(/*channel*/0, duty);
+  DBUGF("PWM %d", duty);
+  m_State = state;
+}
+
+int J1772Pilot::SetPWM(int amps)
+{
+  uint32_t duty = 0;
+  if ((amps >= 6) && (amps <= 51)) { // J1772 states "Available current = (duty cycle %) X 0.6"
+    // amps = duty% * 6 / 10
+    // duty% = 10 / 6 * amps
+    // duty = 1023 / 100 * 10 / 6 * amps = 17.05 * amps
+    duty = (uint32_t)(17.05 * amps);
+  }
+  else if ((amps > 51) && (amps <= 80)) { // J1772 states "Available current = (duty cycle % - 64) X 2.5"
+    // amps = (duty% - 64) * 10 / 4
+    // (duty% - 64) = 4 / 10 * amps
+    // duty% = 4 / 10 * amps - 64
+    // duty = 1023 / 100 * 4 / 10 * amps - 1023 / 100 * 64 = 4.092 * amps - 654.72
+    duty = (uint32_t)(4.092 * amps - 654.72);
+  }
+  // error
+  else {
+      return 1;
+  }
+
+  // valid amps
+  DBUGF("PWM %d %d", duty, amps);
+  if (duty) {
+    ledcWrite(/*channel*/0, duty);
+    m_State = PILOT_STATE_PWM;
+    return 0;
+  }
+  // invalid amps
+  else {
+    return 1;
+  }
+}
+#endif

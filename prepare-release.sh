@@ -4,7 +4,7 @@
 
 pio run -e emonevse
 pio run -e openevse
-pio run -e emonevse_eu
+pio run -e openevse_eu
 
 cp .pio/build/emonevse/firmware.hex emonevse.hex
 cp .pio/build/openevse/firmware.hex openevse.hex

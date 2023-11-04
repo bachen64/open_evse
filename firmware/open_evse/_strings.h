@@ -22,6 +22,9 @@
 
 #pragma once
 
+#include <Arduino.h>
+#include "open_evse.h"
+
 extern const char VERSTR[] PROGMEM;
 inline void GetVerStr(char *buf) {
   strcpy_P(buf,VERSTR);

@@ -19,7 +19,44 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
- 
+
+// PINS_EVSE                    OEV5  OEV6  EVCC/EVCC5  NANO                  BOND
+//
+// CURRENT_PIN                  PC0   PC0   PC0         A0                    PC0
+// PILOT_PIN                    PC1   PC1   PC1         A1                    PC1
+// PP_PIN                       PC2   PC2   PC2         A2                    PC2
+// BTN_REG/IDX                  X     PC3   PC3         A3                    PC3
+// SDA                          PC4   PC4   PC4         A4/SDA                PC4
+// SCL                          PC5   PC5   PC5         A5/SCL                PC5
+//
+// RX-I                         PD0   PD0   PD0         D0/RXD                PD0
+// TX                           PD1   PD1   PD1         D1/TXD                PD1
+// GFI_REG/IDX                  PD2   PD2   PD2         D2                    PD2
+// ACLINE1_REG/IDX              PD3   PD3   PD3         D3                    PD3
+// ACLINE2_REG/IDX              PD4   PD4   PD4         D4                    PD4
+// CHARGING_REG/IDX             PB0   X     X           X                     X
+// CHARGING2_REG/IDX            PD7   X     X           X                     X
+// V6_CHARGING_PIN              X     PD5   X           X                     X
+// GFICAL_REG/IDX               X     X     PD5        (D5)                  (PD5)
+// GFITEST_REG/IDX              PD6   X     X           X                     X
+// V6_CHARGING_PIN2             X     PD6   PD6         D6                    PD6
+// V6_ID_PIN                    X     PD7   PD7         X                     X
+// NEOPIXEL_PIN                 X     X     X           D7                    PD7
+// V6_GFITEST_REG/IDX           X     PB0   PB0         D8                    PB0
+// AUTH_LOCK_REG/IDX            X     X     X           D9                    PB1
+// CHARGINGAC_REG/IDX           PB1   PB1   PB1         X                     X
+// PILOT_REG/IDX                PB2   PB2   PB2         D10/SS                PB2
+// MENNEKES_LOCK_PINA_REG/IDX   PB3   PB3   PB3         D11/MOSI              PB3
+// MENNEKES_LOCK_PINB_REG/IDX   PB4   PB4   PB4         D12/MISO              PB4
+// SLEEP_STATUS_REG/IDX         PB5   PB5   PB5         D13/SCK/BUILTIN_LED   PB5
+//
+// (reserved)                   X     X     X           D22/SWC               PE0
+// CURRENT2_PIN                 X     X     X           A6                    PE1
+// (reserved)                   X     X     X           D23/SWD               PE2
+// CURRENT3_PIN                 X     X     X           A7                    PE3
+// SW_SERIAL_TX                 X     X     X           X                     PE4
+// SW_SERIAL_RX                 X     X     X           X                     PE5
+
 // UK/EU specific settings (by OpenEnergyMonitor):
 // - Disable AUTOSVCLEVEL (autodetection is designed for split-phase)
 // - Charging level default to L2
@@ -29,13 +66,14 @@
 
 #pragma once
 
+#ifndef OPEN_EVSE_LIB
 #define OPEN_EVSE
 
 #include <avr/wdt.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
 #include <pins_arduino.h>
-#include "./Wire.h"
+#include "./_Wire.h"
 #include "avrstuff.h"
 #include "i2caddr.h"
 
@@ -44,6 +82,26 @@
 #else
 #include "WProgram.h" // shouldn't need this but arduino sometimes messes up and puts inside an #ifdef
 #endif // ARDUINO
+#include "MicroDebug.h"
+
+typedef unsigned long time_t;
+
+#else
+#include <Arduino.h>
+#include <EEPROM.h>
+#include <esp_task_wdt.h>
+
+#include "pins_evcc6.h"
+#include "debug.h"
+
+extern StreamSpy SerialDebug;
+extern void eeprom_write_byte (uint8_t *p, uint8_t v);
+extern uint8_t eeprom_read_byte(uint8_t *p);
+extern void eeprom_write_word(uint16_t *p, uint16_t v);
+extern uint16_t eeprom_read_word(uint16_t *p);
+extern void eeprom_write_dword(uint32_t *p, uint32_t v);
+extern uint32_t eeprom_read_dword(uint32_t *p);
+#endif
 
 #define setBits(flags,bits) (flags |= (bits))
 #define clrBits(flags,bits) (flags &= ~(bits))
@@ -53,8 +111,6 @@
 #endif // !VERSION
 
 #include "Language_default.h"   //Default language should always be included as bottom layer
-
-typedef unsigned long time_t;
 
 //Language preferences: Add your custom languagefile here. See Language_default.h for more info.
 //#include "Language_norwegian.h"
@@ -79,7 +135,7 @@ typedef unsigned long time_t;
 #define AUTOSVCLEVEL
 #endif
 
-// on boot, EVSE locked until receives $SB 
+// on boot, EVSE locked until receives $SB
 //#define BOOTLOCK
 
 // show disabled tests before POST
@@ -140,8 +196,10 @@ typedef unsigned long time_t;
 
 #endif // !PLATFORMIO
 
+#ifndef OPEN_EVSE_LIB
 // enable $GI
 #define MCU_ID_LEN 10
+#endif
 
 // enable watchdog timer
 #define WATCHDOG
@@ -193,17 +251,21 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #define TEMPERATURE_MONITORING  // Temperature monitoring support
 
-#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
+//#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
 
 #ifdef AMMETER
 
 // if OVERCURRENT_THRESHOLD is defined, then EVSE will hard fault in
 // the event that the EV is pulling more current than it's allowed to
 // declare overcurrent when charging amps > pilot amps + OVERCURRENT_THRESHOLD
-//#define OVERCURRENT_THRESHOLD 5 // A
+#ifndef OVERCURRENT_THRESHOLD
+#define OVERCURRENT_THRESHOLD 2 // A
+#endif
 // go to error state overcurrent by OVERCURRENT_THRESHOLD amps
 // for OVERCURRENT_TIMEOUT ms
-//#define OVERCURRENT_TIMEOUT 10000UL // ms
+#ifndef OVERCURRENT_TIMEOUT
+#define OVERCURRENT_TIMEOUT 5000UL // ms
+#endif
 
 // if there's no accurate voltmeter, hardcode voltages
 #ifndef MV_FOR_L1
@@ -230,7 +292,7 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif //AMMETER
 
 //Adafruit RGBLCD (MCP23017) - can have RGB or monochrome backlight
-#define RGBLCD
+//#define RGBLCD
 
 //select default LCD backlight mode. can be overridden w/CLI/RAPI
 #define BKL_TYPE_MONO 0
@@ -259,7 +321,9 @@ extern AutoCurrentCapacityController g_ACCController;
 // How to use 1-button menu
 // Long press activates menu
 // When within menus, short press cycles menu items, long press selects and exits current submenu
+#if !defined(DISABLE_BTN_MENU) && !defined(BTN_MENU)
 #define BTN_MENU
+#endif // !DISABLE_BTN_MENU && !BTN_MENU
 
 // take out basic setup stuff that the user really shouldn't be changing,
 // which can be set via RAPI/WiFi module.. reclaims a lot of code space
@@ -278,7 +342,9 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // Option for RTC and DelayTime
 // REQUIRES HARDWARE RTC: DS1307 or DS3231 connected via I2C
+#if !defined(DISABLE_RTC) && !defined(RTC)
 #define RTC // enable RTC & timer functions
+#endif // !DISABLE_RTC && !RTC
 
 #ifdef RTC
 // Option for Delay Timer - GoldServe
@@ -303,7 +369,9 @@ extern AutoCurrentCapacityController g_ACCController;
 //(insn 884 881 887 135 (set (mem:QI (post_dec:HI (reg/f:HI 32 __SP_L__)) [0  S1// A8])
 //
 ////        (subreg:QI (reg/f:HI 1065) 1)) C:\Users\Geek\AppData\Local\Temp\arduino_build_853681\sketch\rapi_proc.cpp:418 1 {pushqi1}
+#ifndef OPEN_EVSE_LIB
 #define GPPBUGKLUDGE
+#endif//OPEN_EVSE_LIB
 #endif // RTC
 
 #ifdef OCPP
@@ -311,18 +379,20 @@ extern AutoCurrentCapacityController g_ACCController;
 #define RAPI_SERIAL
 #endif // OCPP
 
+// option for sleep status - if enabled, this pin goes HIGH when the EVSE is sleeping, and LOW otherwise
+#ifdef ENABLE_SLEEP_STATUS
+#define SLEEP_STATUS_REG &PINB
+#define SLEEP_STATUS_IDX 5
+#endif // ENABLE_SLEEP_STATUS
 
-// if defined, this pin goes HIGH when the EVSE is sleeping, and LOW otherwise
-//#define SLEEP_STATUS_REG &PINB
-//#define SLEEP_STATUS_IDX 4
-
+// option for auth lock
 #ifdef AUTH_LOCK
 // AUTH_LOCK_REG/IDX - use an input pin to control AUTH_LOCK instead of
 // manual function calls
 // digital pin is configured as input with internal pull-up enabled
 // EVSE is locked when input HIGH and unlocked when input LOW
-//#define AUTH_LOCK_REG &PINC
-//#define AUTH_LOCK_IDX 2
+#define AUTH_LOCK_REG &PINB
+#define AUTH_LOCK_IDX 1
 #endif // AUTH_LOCK
 
 
@@ -332,7 +402,9 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // phase and frequency correct PWM 1/8000 resolution
 // when not defined, use fast PWM -> 1/250 resolution
+#ifndef PAFC_PWM
 #define PAFC_PWM
+#endif
 
 // glynhudson reports that LCD gets corrupted by EMC testing during CE
 // certification.. redraw display periodically when enabled
@@ -343,11 +415,16 @@ extern AutoCurrentCapacityController g_ACCController;
 // ONLY WORKS PWM-CAPABLE PINS!!!
 // use Arduino pin number PD5 = 5, PD6 = 6
 //#define RELAY_PWM
+#if defined(NANO)
+#undef RELAY_PWM
+#endif // NANO
+#ifdef RELAY_PWM
 #define DEFAULT_RELAY_CLOSE_MS 100
 #define DEFAULT_RELAY_HOLD_PWM 255 // (0-255, where 0=0%, 255=100%
 // enables RAPI $Z0 for tuning PWM (see rapi_proc.h for $Z0 syntax)
 // PWM parameters written to/loaded from EEPROM
 #define RELAY_HOLD_DELAY_TUNING // enable Z0
+#endif
 
 //-- end features
 
@@ -357,8 +434,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #if defined(RGBLCD) || defined(I2CLCD)
 #define LCD16X2
-//If LCD is not defined, undef BTN_MENU - requires LCD
-#else
+#else // If LCD is not defined, undef BTN_MENU - requires LCD
 #undef BTN_MENU
 #endif // RGBLCD || I2CLCD
 
@@ -425,9 +501,15 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // WARNING: ALL DELAYS *MUST* BE SHORTER THAN THIS TIMER OR WE WILL GET INTO
 // AN INFINITE RESET LOOP
+#if defined(__LGT8F__)
+#define WATCHDOG_TIMEOUT WTO_2S
+#else // ATmega328P
 #define WATCHDOG_TIMEOUT WDTO_2S
+#endif // ATmega328P
 
+#ifndef LCD_MAX_CHARS_PER_LINE
 #define LCD_MAX_CHARS_PER_LINE 16
+#endif
 
 #define TMP_BUF_SIZE ((LCD_MAX_CHARS_PER_LINE+1)*2)
 
@@ -450,6 +532,14 @@ extern AutoCurrentCapacityController g_ACCController;
 #define MIN_CURRENT_CAPACITY_J1772 6
 #endif
 
+// unlock limit
+#ifdef LIMIT_UNLOCKED
+#undef MAX_CURRENT_CAPACITY_LIMIT
+#endif
+#ifndef MAX_CURRENT_CAPACITY_GROUP
+#define MAX_CURRENT_CAPACITY_GROUP 63 // Max Smart Group Charging current capacity
+#endif
+
 // maximum allowable current in amps
 #ifndef MAX_CURRENT_CAPACITY_L1
 #define MAX_CURRENT_CAPACITY_L1 24 // J1772 Max for L1 on a 20A circuit = 16, 15A circuit = 12 Some Vehicles suppoty 24A on 30A RV outlet TT-30
@@ -457,8 +547,12 @@ extern AutoCurrentCapacityController g_ACCController;
 #ifndef MAX_CURRENT_CAPACITY_L2
 #define MAX_CURRENT_CAPACITY_L2 80 // J1772 Max for L2 = 80
 #endif
+#ifndef MAX_CURRENT_CAPACITY_LIMIT
+#define MAX_CURRENT_CAPACITY_LIMIT 32 // max configured allowed current capacity (saved to EEPROM)
+#endif
 
 //J1772EVSEController
+#ifndef OPEN_EVSE_LIB
 
 #define CURRENT_PIN 0 // analog current reading pin ADCx
 #define PILOT_PIN 1 // analog pilot voltage reading pin ADCx
@@ -487,15 +581,28 @@ extern AutoCurrentCapacityController g_ACCController;
 #define ACLINE2_REG &PIND
 #define ACLINE2_IDX 4
 
+#if defined(EVCC)
+#define GFICAL_REG &PIND
+#define GFICAL_IDX 5
+#define V6_CHARGING_PIN2 6
+#define V6_ID_PIN 7
+#define V6_GFITEST_REG &PINB
+#define V6_GFITEST_IDX 0
+#elif defined(OEV6)
 #define V6_CHARGING_PIN  5
 #define V6_CHARGING_PIN2 6
-
+#define V6_ID_PIN 7
+#define V6_GFITEST_REG &PINB
+#define V6_GFITEST_IDX 0
+#else //OEV5
 // digital Relay trigger pin
 #define CHARGING_REG &PINB
 #define CHARGING_IDX 0
 // digital Relay trigger pin for second relay
 #define CHARGING2_REG &PIND
 #define CHARGING2_IDX 7
+#endif
+
 //digital Charging pin for AC relay
 #define CHARGINGAC_REG &PINB
 #define CHARGINGAC_IDX 1
@@ -506,7 +613,7 @@ extern AutoCurrentCapacityController g_ACCController;
 // obsolete LED pin
 //#define GREEN_LED_REG &PINB
 //#define GREEN_LED_IDX 5
-#endif // OPENEVSE_2
+#endif // !OPENEVSE_2
 
 // N.B. if PAFC_PWM is enabled, then pilot pin can be PB1 or PB2
 // if using fast PWM (PAFC_PWM disabled) pilot pin *MUST* be PB2
@@ -526,6 +633,15 @@ extern AutoCurrentCapacityController g_ACCController;
 #include "MennekesLock.h"
 #endif // MENNEKES_LOCK
 
+#else // OPEN_EVSE_LIB
+
+#define PP_PIN          PP_READ
+#define PILOT_PIN       PILOT_READ
+#define ACLINE1_REG     &ESP_AT1
+#define ACLINE2_REG     &ESP_AT2
+#define CHARGINGAC_REG  &CHARGING
+
+#endif // OPEN_EVSE_LIB
 
 
 
@@ -579,6 +695,8 @@ extern AutoCurrentCapacityController g_ACCController;
 #define EOFS_RELAY_CLOSE_MS 37 // 1 byte
 #define EOFS_RELAY_HOLD_PWM 38 // 1 byte
 
+#define EOFS_PP_AMPS 39 // 1 byte
+
 #define EOFS_MAX_HW_CURRENT_CAPACITY 511 // 1 byte
 
 
@@ -599,12 +717,14 @@ extern AutoCurrentCapacityController g_ACCController;
 // half cycle
 #define AC_SAMPLE_MS 20 // 1 cycle @ 60Hz = 16.6667ms @ 50Hz = 20ms
 
+#ifndef OPEN_EVSE_LIB
 
 // V6 has PD7 tied to ground
 #define V6_ID_REG D
 #define V6_ID_IDX 7
 
 #ifdef GFI
+
 #define GFI_INTERRUPT 0 // interrupt number 0 = PD2, 1 = PD3
 // interrupt number 0 = PD2, 1 = PD3
 #define GFI_REG &PIND
@@ -617,15 +737,16 @@ extern AutoCurrentCapacityController g_ACCController;
 // V6 GFI test pin PB0
 #define V6_GFITEST_REG &PINB
 #define V6_GFITEST_IDX 0
+#endif // GFI_SELFTEST
 
+#endif // GFI
 
+#endif // !OPEN_EVSE_LIB
 
 #define GFI_TEST_CYCLES 60
 // GFI pulse should be 50% duty cycle
 #define GFI_PULSE_ON_US 8333 // 1/2 of roughly 60 Hz.
 #define GFI_PULSE_OFF_US 8334 // 1/2 of roughly 60 Hz.
-#endif
-#endif // GFI
 
 #ifdef GFI_TESTING
 #define GFI_TIMEOUT ((unsigned long)(15*1000))
@@ -648,7 +769,7 @@ extern AutoCurrentCapacityController g_ACCController;
 #if defined(RGBLCD) || defined(I2CLCD)
 // Using LiquidTWI2 for both types of I2C LCD's
 // see http://blog.lincomatic.com/?p=956 for installation instructions
-#include "./Wire.h"
+#include "./_Wire.h"
 #ifdef I2CLCD_PCF8574
 #include "./LiquidCrystal_I2C.h"
 #define LCD_I2C_ADDR 0x27
@@ -664,14 +785,15 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // RGBLCD || I2CLCD
 
 // button sensing pin
+#if !defined(OPEN_EVSE_LIB)
 #define BTN_REG &PINC
 #define BTN_IDX 3
 #define BTN_PRESS_SHORT 50  // ms
 #define BTN_PRESS_LONG 500 // ms
 #define BTN_PRESS_VERYLONG 10000
+#endif
 
-
-#ifdef RTC
+#if defined(RTC) || defined(OPEN_EVSE_LIB)
 // Default start/stop timers for un-initialized EEPROMs.
 // Makes it easy to compile in default time without need to set it up the first time.
 #define DEFAULT_START_HOUR    0x00 //Start time: 00:05
@@ -731,7 +853,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #ifdef TEMPERATURE_MONITORING
 
-#define MCP9808_IS_ON_I2C    // Use the MCP9808 connected to I2C
+//#define MCP9808_IS_ON_I2C    // Use the MCP9808 connected to I2C
 //#define TMP007_IS_ON_I2C     // Use the TMP007 IR sensor on I2C
 #define TEMPERATURE_DISPLAY_ALWAYS 0     // Set this flag to 1 to always show temperatures on the bottom line of the 16X2 LCD
                                          // Set to it 0 to only display when temperatures become elevated
@@ -749,7 +871,9 @@ extern AutoCurrentCapacityController g_ACCController;
 #ifdef OPENEVSE_2
 #define TEMPERATURE_AMBIENT_THROTTLE_DOWN 650
 #else
+#ifndef TEMPERATURE_AMBIENT_THROTTLE_DOWN
 #define TEMPERATURE_AMBIENT_THROTTLE_DOWN 650
+#endif
 #endif
 
 // If the OpenEVSE responds nicely to the lower current drawn and temperatures in the enclosure
@@ -757,14 +881,18 @@ extern AutoCurrentCapacityController g_ACCController;
 #ifdef OPENEVSE_2
 #define TEMPERATURE_AMBIENT_RESTORE_AMPERAGE 620
 #else
+#ifndef TEMPERATURE_AMBIENT_RESTORE_AMPERAGE
 #define TEMPERATURE_AMBIENT_RESTORE_AMPERAGE 620
+#endif
 #endif
 
 // This is the temperature in the enclosure where we tell the car to draw 1/4 amperage or 6A is minimum.
 #ifdef OPENEVSE_2
 #define TEMPERATURE_AMBIENT_SHUTDOWN 680
 #else
+#ifndef TEMPERATURE_AMBIENT_SHUTDOWN
 #define TEMPERATURE_AMBIENT_SHUTDOWN 680
+#endif
 #endif
 
 //  At this temperature gracefully tell the EV to quit drawing any current, and leave the EVSE in
@@ -773,7 +901,9 @@ extern AutoCurrentCapacityController g_ACCController;
 #ifdef OPENEVSE_2
 #define TEMPERATURE_AMBIENT_PANIC 710
 #else
+#ifndef TEMPERATURE_AMBIENT_PANIC
 #define TEMPERATURE_AMBIENT_PANIC 710
+#endif
 #endif
 
 #define TEMPERATURE_INFRARED_THROTTLE_DOWN 650    // This is the temperature seen  by the IR sensor where we tell the car to draw 1/2 amperage.
@@ -823,23 +953,35 @@ typedef union union4b {
   uint32_t u32;
   unsigned u;
   int i;
+  float f;
 } UNION4B,*PUNION4B;
 
 
 //-- begin class definitions
 
 #ifdef WATCHDOG
-#define WDT_RESET() wdt_reset() // pat the dog
-#define WDT_ENABLE() wdt_enable(WATCHDOG_TIMEOUT)
+#ifdef __AVR__
+#define WDT_RESET()     wdt_reset() // pat the dog
+#define WDT_ENABLE(x)   wdt_enable(x)
+#elif ESP32
+#define WDT_RESET()     extern bool loopTaskWDTEnabled; if (loopTaskWDTEnabled) feedLoopWDT();
+#define WDT_ENABLE(x)
 #else
 #define WDT_RESET()
-#define WDT_ENABLE()
-#endif // WATCHDOG
+#define WDT_ENABLE(x)
+#error WDT not enabled
+#endif
+#else
+#define WDT_RESET()
+#define WDT_ENABLE(x)
+#endif
+
 
 // OnboardDisplay.m_bFlags
 #define OBDF_MONO_BACKLIGHT 0x01
 #define OBDF_AMMETER_DIRTY  0x80
 #define OBDF_UPDATE_DISABLED 0x40
+#define OBDF_NO_LCD 0x04
 
 // OnboardDisplay::Update()
 #define OBD_UPD_NORMAL    0
@@ -870,6 +1012,7 @@ class OnboardDisplay
 public:
   OnboardDisplay();
   void Init();
+  uint8_t NoLcd() { return m_bFlags & OBDF_NO_LCD; }
 
   void SetGreenLed(uint8_t state) {
 #ifdef GREEN_LED_REG
@@ -950,6 +1093,13 @@ public:
 #ifdef RGBLCD
   uint8_t readButtons() { return m_Lcd.readButtons(); }
 #endif // RGBLCD
+#ifdef OPEN_EVSE_LIB
+  void showProgressBar(int y, int progress);
+  inline void printWarningChar(int x, int y) {
+    m_Lcd.setCursor(x,y);
+    m_Lcd.write(byte(0));
+  }
+#endif
 #endif // LCD16X2
 
 #ifdef AMMETER
@@ -1422,5 +1572,5 @@ char *GetFirmwareVersion(char *str);
 void wdt_delay(uint32_t ms);
 
 
-#include "strings.h"
+#include "_strings.h"
 #include "rapi_proc.h"

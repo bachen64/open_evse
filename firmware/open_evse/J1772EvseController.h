@@ -19,7 +19,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
+#include "open_evse.h"
 
 // EVSE states for m_EvseState
 #define EVSE_STATE_UNKNOWN 0x00
@@ -48,12 +48,71 @@ inline int8_t IsEvseFaultState(uint8_t state) {
   else return 0;
 }
 
+// Equivalent oscilloscope and threshold data
+// Äquivalente Oszilloskop und Schwellenwertdaten
+// 等效示波器及其阈值数据
+//
+// (C) 2023 Kinetos Luzhou. All rights reserved
+//
+// PILOT  READ ADC12 ADC10  measured Starting       PLOW:3611       PHIGH:3642          PILOT_STATE_P12
+// +12.0  5000  4095  1023  vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+// +11.5  4900  4013  1003
+// +11.0  4800  3931   982
+// +10.6  4700  3849   962
+// +10.1  4600  3767   941
+// + 9.6  4500  3686   921  measured Ready          plow:...        PHIGH:3621~3641     PILOT_STATE_PXX
+// + 9.1  4400  3604   900
+// + 8.6  4300  3522   880  ^^^^^^^^ m_ThreshAB ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// + 8.2  4200  3440   859
+// + 7.7  4100  3358   839
+// + 7.2  4000  3276   818  measured Connected      plow:...        PHIGH:3255~3265     PILOT_STATE_PWM
+// + 6.7  3900  3194   798
+// + 6.2  3800  3112   777  ^^^^^^^^ m_ThreshBC ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// + 5.8  3700  3030   757  measured Charging       plow:...        PHIGH:2962          PILOT_STATE_PWM
+// + 5.3  3600  2948   737
+// + 4.8  3500  2867   716
+// + 4.3  3400  2785   696
+// + 3.8  3300  2703   675  ^^^^^^^^ m_ThreshCD ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// + 3.4  3200  2621   655
+// + 2.9  3100  2539   634  measured Vent Required  plow:...        PHIGH:2558          PILOT_STATE_PWM
+// + 2.4  3000  2457   614
+// + 1.9  2900  2375   593  ^^^^^^^^ m_ThreshD  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// + 1.4  2800  2293   573
+// + 1.0  2700  2211   552
+// + 0.5  2600  2129   532  TODO:    Pilot Error    PLOW:XXXX       phigh:...           PILOT_STATE_PWM
+//   0.0  2500  2048   512
+// - 0.5  2400  1966   491  ^^^^^^^^ m_ThreshPE ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// - 1.0  2300  1884   471
+// - 1.4  2200  1802   450
+// - 1.9  2100  1720   430
+// - 2.4  2000  1638   409
+// - 2.9  1900  1556   389  measured Diode Short    PLOW:1627       phigh:...           PILOT_STATE_PWM
+// - 3.4  1800  1474   368
+// - 3.8  1700  1392   348
+// - 4.3  1600  1310   327
+// - 4.8  1500  1229   307
+// - 5.3  1400  1147   286
+// - 5.8  1300  1065   266  ^^^^^^^^ m_ThreshDS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// - 6.2  1200   983   246
+// - 6.7  1100   901   225  measured Diode OK       PLOW:928~931    phigh:...           PILOT_STATE_PWM
+// - 7.2  1000   819   205
+// - 7.7   900   737   184
+// - 8.2   800   655   164
+// - 8.6   700   573   143
+// - 9.1   600   491   123
+// - 9.6   500   410   102
+// -10.1   400   328    82
+// -10.6   300   246    61
+// -11.0   200   164    41
+// -11.5   100    82    20
+// -12.0     0     0     0  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 typedef struct threshdata {
-  uint16_t m_ThreshAB; // state A -> B
-  uint16_t m_ThreshBC; // state B -> C
-  uint16_t m_ThreshCD; // state C -> D
-  uint16_t m_ThreshD;  // state D
-  uint16_t m_ThreshDS; // diode short
+  uint16_t m_ThreshAB;    // State A -> B   3522      880       4300mV  +8.6V <= phigh
+  uint16_t m_ThreshBC;    // State B -> C   3112      777       3800mV  +6.2V <= phigh
+  uint16_t m_ThreshCD;    // State C -> D   2703      675       3300mV  +3.8V <= phigh
+  uint16_t m_ThreshD;     // Vent Required  2375      593       2900mV  +1.9V <= phigh
+  //uint16_t m_ThreshPE;    // Pilot Error    1966      491       2400mV  -0.5V <= plow
+  uint16_t m_ThreshDS;    // Diode Short    1065      266       1300mV  -5.8V <= plow
 } THRESH_DATA,*PTHRESH_DATA;
 
 typedef struct calibdata {
@@ -123,12 +182,12 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 
 
 // acpinstate bits - when set, means pin has voltage detected
-#define ACPIN1_OPEN 2
-#define ACPIN2_OPEN 1
-#define ACPINS_OPEN (ACPIN1_OPEN|ACPIN2_OPEN)
+#define ACPIN1_OPEN B10 // RLY_TEST_PIN_OPEN
+#define ACPIN2_OPEN B01 // GND_TEST_PIN_OPEN
+#define ACPINS_OPEN (ACPIN1_OPEN|ACPIN2_OPEN) // B10 | B01
 // for ECF_CGMI
-#define GND_TEST_PIN_OPEN ACPIN2_OPEN
-#define RLY_TEST_PIN_OPEN ACPIN1_OPEN
+#define GND_TEST_PIN_OPEN ACPIN2_OPEN // B01
+#define RLY_TEST_PIN_OPEN ACPIN1_OPEN // B10
 
 class J1772EVSEController {
   J1772Pilot m_Pilot;
@@ -188,7 +247,7 @@ class J1772EVSEController {
   uint8_t m_PilotState;
   unsigned long m_TmpEvseStateStart;
   unsigned long m_TmpPilotStateStart;
-  uint8_t m_MaxHwCurrentCapacity; // max L2 amps that can be set
+  uint8_t m_MaxHwCurrentCapacity; // max SL2 amps that can be set
   uint8_t m_CurrentCapacity; // max amps we can output
   unsigned long m_ChargeOnTimeMS; // millis() when relay last closed
   unsigned long m_ChargeOffTimeMS; // millis() when relay last opened
@@ -207,7 +266,9 @@ class J1772EVSEController {
 #ifdef OEV6
   uint8_t m_isV6;
 #endif
-
+#ifdef OPEN_EVSE_LIB
+  int8_t m_Recoverable;
+#endif
 
   void setFlags(uint16_t flags) { 
     m_wFlags |= flags; 
@@ -240,11 +301,11 @@ class J1772EVSEController {
 #define both 0
 #define L1on 1
 #define L2on 2
-#define none 3
+#define noneon 3
 // service states for doPost()
 #define UD 0 // undefined
-#define L1 1 // L1
-#define L2 2 // L2
+#define SL1 1 // SL1
+#define SL2 2 // SL2
 #define OG 3 // open ground
 #define SR 4 // stuck relay
 #define FG 5 // GFI fault
@@ -464,10 +525,22 @@ int GetHearbeatTrigger();
     return m_ChargingCurrent;
 #endif // OCPPDBG
   }
+  int32_t GetChargingCurrent2() {
+    return GetChargingCurrent();
+  }
+  int32_t GetChargingCurrent3() {
+    return GetChargingCurrent();
+  }
 #ifdef FAKE_CHARGING_CURRENT
   void SetChargingCurrent(int32_t current) {
     m_ChargingCurrent = current;
     m_AmmeterReading = current;
+  }
+  void SetChargingCurrent2(int32_t current) {
+    SetChargingCurrent(current);
+  }
+  void SetChargingCurrent3(int32_t current) {
+    SetChargingCurrent(current);
   }
 #endif
 
@@ -592,6 +665,11 @@ int GetHearbeatTrigger();
   void UnlockMennekes() { m_MennekesLock.Unlock(1); }
 #endif // MENNEKES_LOCK
 
+#ifdef OPEN_EVSE_LIB
+  int8_t Recoverable() { return m_Recoverable; }
+  PILOT_STATE PilotGetState() { return m_Pilot.GetState(); }
+  void SetEvseState(uint8_t state) { m_EvseState = state; }
+#endif
 };
 
 #ifdef FT_ENDURANCE
