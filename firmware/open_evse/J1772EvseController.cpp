@@ -1362,7 +1362,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
           m_EvseState = EVSE_STATE_NO_GROUND;
           
           chargingOff(); // open the relay
-          if ((prevevsestate != EVSE_STATE_NO_GROUND) && (((uint8_t)(m_NoGndTripCnt+1)) < 254)) {
+          if ((prevevsestate != EVSE_STATE_NO_GROUND) && (((uint8_t)(m_NoGndTripCnt+1)) < 253)) {
             m_NoGndTripCnt++;
             eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,m_NoGndTripCnt);
           }
@@ -1414,7 +1414,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
                  ((curms - m_StuckRelayStartTimeMS) > STUCK_RELAY_DELAY) ) ||  // start delay de-bounce
                (prevevsestate == EVSE_STATE_STUCK_RELAY) ) { // already in error state
             // stuck relay
-            if ((prevevsestate != EVSE_STATE_STUCK_RELAY) && (((uint8_t)(m_StuckRelayTripCnt+1)) < 254)) {
+            if ((prevevsestate != EVSE_STATE_STUCK_RELAY) && (((uint8_t)(m_StuckRelayTripCnt+1)) < 253)) {
               m_StuckRelayTripCnt++;
               eeprom_write_byte((uint8_t*)EOFS_STUCK_RELAY_TRIP_CNT,m_StuckRelayTripCnt);
             }   
@@ -1435,7 +1435,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
     m_EvseState = EVSE_STATE_GFCI_FAULT;
 
     if (prevevsestate != EVSE_STATE_GFCI_FAULT) { // state transition
-      if (((uint8_t)(m_GfiTripCnt+1)) < 254) {
+      if (((uint8_t)(m_GfiTripCnt+1)) < 253) {
 	m_GfiTripCnt++;
 	eeprom_write_byte((uint8_t*)EOFS_GFI_TRIP_CNT,m_GfiTripCnt);
       }
