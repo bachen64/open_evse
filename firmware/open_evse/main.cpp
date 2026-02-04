@@ -126,7 +126,9 @@ Menu *g_SettingsMenuList[] = {
 Menu *g_SetupMenuList[] = {
 #ifdef NOSETUP_MENU
   &g_MaxCurrentMenu,
+#ifdef RTC
   &g_RTCMenu,
+#endif
 #else // !NOSETUP_MENU
 #ifdef DELAYTIMER_MENU
   &g_RTCMenu,

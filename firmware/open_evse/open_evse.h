@@ -193,7 +193,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #define TEMPERATURE_MONITORING  // Temperature monitoring support
 
-#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
+//#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
 
 #ifdef AMMETER
 
@@ -278,7 +278,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // Option for RTC and DelayTime
 // REQUIRES HARDWARE RTC: DS1307 or DS3231 connected via I2C
-#define RTC // enable RTC & timer functions
+//#define RTC // enable RTC & timer functions
 
 #ifdef RTC
 // Option for Delay Timer - GoldServe
@@ -348,6 +348,10 @@ extern AutoCurrentCapacityController g_ACCController;
 // enables RAPI $Z0 for tuning PWM (see rapi_proc.h for $Z0 syntax)
 // PWM parameters written to/loaded from EEPROM
 #define RELAY_HOLD_DELAY_TUNING // enable Z0
+
+// OEV6 w/ CGMI - when power is loss, temporarily triggers NO GROUND fault
+// delay recording of NO GROUND fault to avoid recording this spurious fault
+#define NO_GND_RECORD_DELAY 2000
 
 //-- end features
 
