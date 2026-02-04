@@ -127,5 +127,11 @@ void EnergyMeter::SaveTotkWh()
   eeprom_write_dword((uint32_t*)EOFS_KWH_ACCUMULATED,m_wattHoursTot);
 }
 
+
+void EnergyMeter::ResetTotkWh() {
+  eeprom_write_dword((uint32_t*)EOFS_KWH_ACCUMULATED,0);
+  m_wattHoursTot = 0;
+}
+
 #endif // KWH_RECORDING
 

@@ -591,7 +591,15 @@ int GetHearbeatTrigger();
   void LockMennekes() { m_MennekesLock.Lock(1); }
   void UnlockMennekes() { m_MennekesLock.Unlock(1); }
 #endif // MENNEKES_LOCK
+  void ResetFaultCounters() {
+    m_GfiTripCnt = 0xff;
+    m_NoGndTripCnt = 0xff;
+    m_StuckRelayTripCnt = 0xff;
 
+    eeprom_write_byte((uint8_t*)EOFS_GFI_TRIP_CNT,0xff);
+    eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,0xff);
+    eeprom_write_byte((uint8_t*)EOFS_STUCK_RELAY_TRIP_CNT,0xff);
+  }
 };
 
 #ifdef FT_ENDURANCE

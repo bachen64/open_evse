@@ -116,6 +116,7 @@ colors:
  WHITE 7
 
  $FB 7*03 - set backlight to white
+FC - reset fault counters and total energy
 FD - disable EVSE
  $FD*AE
 FE - enable EVSE

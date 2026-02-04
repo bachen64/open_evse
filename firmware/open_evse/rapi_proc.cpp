@@ -290,6 +290,11 @@ int EvseRapiProcessor::processCmd()
       }
       break;
 #endif // LCD16X2
+    case 'C': // reset fault counters + total energy
+      g_EvseController.ResetFaultCounters();
+      g_EnergyMeter.ResetTotkWh();
+      rc = 0;
+      break;
     case 'D': // disable EVSE
       g_EvseController.Disable();
       rc = 0;

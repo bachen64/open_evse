@@ -38,6 +38,7 @@ public:
   void SetTotkWh(uint32_t whtot) { m_wattHoursTot = whtot; }
   uint32_t GetTotkWh() { return m_wattHoursTot; }
   uint32_t GetSessionWs() { return m_wattSeconds; }
+  void ResetTotkWh();
 };
 
 
