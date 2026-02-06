@@ -12,7 +12,7 @@
 // See LICENSE for a copy of the GNU General Public License or see
 // it online at <http://www.gnu.org/licenses/>.
 
-#include "avrstuff.h"
+#include "variant.h"
 
 void DigitalPin::init(volatile uint8_t* _reg,uint8_t idx,PinMode _mode)
 {

@@ -31,12 +31,9 @@
 
 #define OPEN_EVSE
 
-#include <avr/wdt.h>
-#include <avr/pgmspace.h>
-#include <avr/eeprom.h>
 #include <pins_arduino.h>
-#include "./Wire.h"
-#include "avrstuff.h"
+#include "Wire.h"
+#include "variant.h"
 #include "i2caddr.h"
 
 #include "Arduino.h"

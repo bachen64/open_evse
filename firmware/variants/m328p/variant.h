@@ -14,7 +14,9 @@
 // it online at <http://www.gnu.org/licenses/>.
 
 #pragma once
-
+#include <avr/wdt.h>
+#include <avr/pgmspace.h>
+#include <avr/eeprom.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #if defined(ARDUINO) && (ARDUINO >= 100)
