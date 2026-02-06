@@ -39,11 +39,7 @@
 #include "avrstuff.h"
 #include "i2caddr.h"
 
-#if defined(ARDUINO) && (ARDUINO >= 100)
 #include "Arduino.h"
-#else
-#include "WProgram.h" // shouldn't need this but arduino sometimes messes up and puts inside an #ifdef
-#endif // ARDUINO
 
 #define setBits(flags,bits) (flags |= (bits))
 #define clrBits(flags,bits) (flags &= ~(bits))
