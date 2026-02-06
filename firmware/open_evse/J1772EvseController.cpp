@@ -1337,10 +1337,13 @@ void J1772EVSEController::Update(uint8_t forcetransition)
     tmpevsestate = EVSE_STATE_NO_GROUND;
     m_EvseState = EVSE_STATE_NO_GROUND;
     chargingOff(); // open the relay
-    if ((prevevsestate != EVSE_STATE_NO_GROUND) &&
-        (((uint8_t)(m_NoGndTripCnt+1)) < 254)) {
-      m_NoGndTripCnt++;
-      eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,m_NoGndTripCnt);
+    if (prevevsestate != EVSE_STATE_NO_GROUND) {
+      m_NoGndStart = curms;
+    }
+    else if (m_NoGndStart && ((curms - m_NoGndStart) >= NO_GND_RECORD_DELAY) &&
+             (((uint8_t)(m_NoGndTripCnt+1)) < 253)) {
+      eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,++m_NoGndTripCnt);
+      m_NoGndStart = 0;
     }
     nofault = 0;
   }

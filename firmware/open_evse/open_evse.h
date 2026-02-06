@@ -347,7 +347,9 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // OEV6 w/ CGMI - when power is loss, temporarily triggers NO GROUND fault
 // delay recording of NO GROUND fault to avoid recording this spurious fault
-#define NO_GND_RECORD_DELAY 2000
+#ifndef NO_GND_RECORD_DELAY
+#define NO_GND_RECORD_DELAY 0
+#endif
 
 //-- end features
 
