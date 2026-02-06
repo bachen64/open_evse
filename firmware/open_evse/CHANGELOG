@@ -1,5 +1,13 @@
 Change Log
 
+20260205 SCL
+- OEV6 w/ CGMI - when power is lost, temporarily triggers NO GROUND fault
+   delay recording of NO GROUND fault by NO_GND_RECORD_DELAY (currently 2s)
+   to avoid recording this spurious fault
+- add RAPI $FC to clear fault counters + total energy
+- had bug in max fault counters.. was checking < 254 instead of <253, so when
+  maxed out would be zero instead of 255 (since returned value is count+1)
+	
 20230207 SCL
 - PP_AUTO_AMPACITY changes
   -> used to change current capacity to PP ampacity. now, only change it

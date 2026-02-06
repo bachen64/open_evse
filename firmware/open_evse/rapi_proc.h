@@ -364,7 +364,7 @@ Z0 closems holdpwm
 
 #ifdef RAPI
 
-#define RAPIVER "5.2.1"
+#define RAPIVER "5.3.0"
 
 #define WIFI_MODE_AP 0
 #define WIFI_MODE_CLIENT 1
