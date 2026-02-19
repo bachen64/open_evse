@@ -5,6 +5,7 @@ Change Log
   is enforced
 - RAPI: added $FO - set panic temperature, $GO get panic temperature
   panic temperature is saved to EEPROM. if exceeded, go into EVSE_STATE_OVER_TEMPERATURE
+- it's a NO-OP, but don't enable BTN_MENU by default in open_evse.h, anyway
 	
 20260205 SCL
 - OEV6 w/ CGMI - when power is lost, temporarily triggers NO GROUND fault
