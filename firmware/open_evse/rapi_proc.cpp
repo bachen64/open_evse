@@ -345,6 +345,17 @@ int EvseRapiProcessor::processCmd()
 	}
       }
       break;
+#ifdef TEMPERATURE_MONITORING
+    case 'O': // print to LCD
+      if (tokenCnt == 2) {
+        u1.i16 = dtou32(tokens[1]);
+        if (u1.i16 > 0) {
+          g_TempMonitor.SetPanicTemperature(u1.i16);
+          rc = 0;
+        }
+      }
+      break;
+#endif // TEMPERATURE_MONITORING
 #ifdef LCD16X2
     case 'P': // print to LCD
       if ((tokenCnt >= 4) && !g_EvseController.InHardFault()) {
@@ -753,15 +764,12 @@ int EvseRapiProcessor::processCmd()
       break;
 #endif // VOLTMETER
 #ifdef TEMPERATURE_MONITORING
-#ifdef TEMPERATURE_MONITORING_NY
     case 'O':
-      u1.i = g_TempMonitor.m_ambient_thresh;
-      u2.i = g_TempMonitor.m_ir_thresh;
-      sprintf(buffer,"%d %d",u1.i,u2.i);
+      u1.i = g_TempMonitor.m_panicTemperature;
+      sprintf(buffer,"%d",u1.i);
       bufCnt = 1; // flag response text output
       rc = 0;
       break;
-#endif // TEMPERATURE_MONITORING_NY
     case 'P':
       sprintf(buffer,"%d %d %d",(int)g_TempMonitor.m_DS3231_temperature,
 	      (int)g_TempMonitor.m_MCP9808_temperature,

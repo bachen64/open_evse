@@ -272,8 +272,8 @@ void J1772EVSEController::chargingOn()
 #ifdef OEV6
   if (isV6()) {
 #ifdef RELAY_PWM
-    Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
-    Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
+//    Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
+//    Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
     // turn on charging pin to close relay
     digitalWrite(V6_CHARGING_PIN,HIGH);
     digitalWrite(V6_CHARGING_PIN2,HIGH);
@@ -960,8 +960,8 @@ void J1772EVSEController::Init()
     m_relayCloseMs = DEFAULT_RELAY_CLOSE_MS;
     m_relayHoldPwm = DEFAULT_RELAY_HOLD_PWM;
   }
-  Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
-  Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
+//  Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
+//  Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
 #endif // RELAY_PWM
 
 
@@ -1478,9 +1478,10 @@ void J1772EVSEController::Update(uint8_t forcetransition)
 
 #ifdef TEMPERATURE_MONITORING                 //  A state for OverTemp fault
 if (TempChkEnabled()) {
+  int16_t thresh = g_TempMonitor.GetPanicTemperature();
   if ((g_TempMonitor.m_TMP007_temperature >= TEMPERATURE_INFRARED_PANIC)  ||
-      (g_TempMonitor.m_MCP9808_temperature >= TEMPERATURE_AMBIENT_PANIC)  ||
-      (g_TempMonitor.m_DS3231_temperature >= TEMPERATURE_AMBIENT_PANIC))  {
+      (g_TempMonitor.m_MCP9808_temperature >= thresh)  ||
+      (g_TempMonitor.m_DS3231_temperature >= thresh))  {
     tmpevsestate = EVSE_STATE_OVER_TEMPERATURE;
     m_EvseState = EVSE_STATE_OVER_TEMPERATURE;
     nofault = 0;
@@ -1873,7 +1874,7 @@ if (TempChkEnabled()) {
     this->HsExpirationCheck();  //Check to see if HS is engaged, and if so whether we missed a pulse
 #endif //HEARTBEAT_SUPERVISION
 
-#ifdef TEMPERATURE_MONITORING
+#ifdef TEMPERATURE_THROTTLING
     if(TempChkEnabled()) {
       uint8_t currcap = GetMaxCurrentCapacity();
       uint8_t setit = 0;

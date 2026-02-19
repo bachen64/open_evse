@@ -121,6 +121,12 @@ FD - disable EVSE
  $FD*AE
 FE - enable EVSE
  $FE*AF
+FO set Overtemperature threshold
+ $FO panicthresh
+ panicthresh in 10ths of a degree Celsius
+ $FO 705 - set panic threshold to 70.5C
+ if temperature exceeds panicthresh, EVSE goes into OVER_TEMPERATURE fault state
+
 FP x y text - print text on lcd display
   OPTIONAL: can substitute character 0x11 for spaces within a string, because they print as <SPC> on HD44780. More reliable.
 FR - restart EVSE
@@ -304,9 +310,10 @@ GM - get voltMeter settings
  response: $OK voltcalefactor voltoffset
  $GM^2E
 
-GO get Overtemperature thresholds
- response: $OK ambientthresh irthresh
- thresholds are in 10ths of a degree Celcius
+GO get Overtemperature threshold
+ response: $OK panicthresh
+ panicthresh in 10ths of a degree Celsius
+ if temperature exceeds panicthresh, EVSE goes into OVER_TEMPERATURE fault state
  $GO^2C
 GP - get temPerature (v1.0.3+)
  response: $OK ds3231temp mcp9808temp tmp007temp

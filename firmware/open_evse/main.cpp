@@ -272,10 +272,8 @@ void TempMonitor::Init()
   m_MCP9808_temperature = TEMPERATURE_NOT_INSTALLED;  // 230 means 23.0C  Using an integer to save on floating point library use
   m_DS3231_temperature = TEMPERATURE_NOT_INSTALLED;   // the DS3231 RTC has a built in temperature sensor
   m_TMP007_temperature = TEMPERATURE_NOT_INSTALLED;
-
-#ifdef TEMPERATURE_MONITORING_NY
-  LoadThresh();
-#endif
+  m_panicTemperature = (int16_t) eeprom_read_word((uint16_t*)EOFS_PANIC_TEMP);
+  if (m_panicTemperature <= 0) m_panicTemperature = TEMPERATURE_AMBIENT_PANIC;
 
 #ifdef MCP9808_IS_ON_I2C
   m_tempSensor.begin();
@@ -2427,14 +2425,19 @@ void ProcessInputs()
 void EvseReset()
 {
   Wire.begin();
+
   g_OBD.Init();
 
 #ifdef RAPI
   RapiInit();
 #endif
 
-  g_EvseController.Init();
 
+#ifdef TEMPERATURE_MONITORING
+  g_TempMonitor.Init();
+#endif
+
+  g_EvseController.Init();
 #ifdef DELAYTIMER
   g_DelayTimer.Init(); // this *must* run after g_EvseController.Init() because it sets one of the vFlags
 #endif  // DELAYTIMER
@@ -2488,13 +2491,8 @@ void setup()
 #ifdef PP_AUTO_AMPACITY
   g_EvseController.SetStateTransitionReqFunc(&StateTransitionReqFunc);
 #endif //PP_AUTO_AMPACITY
-  EvseReset();
-  
-#ifdef TEMPERATURE_MONITORING
-  g_TempMonitor.Init();
-#endif
 
-  
+  EvseReset();
 
 #ifdef BOOTLOCK
 #ifdef LCD16X2

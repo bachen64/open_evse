@@ -185,6 +185,11 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif //UL_COMPLIANT
 
 #define TEMPERATURE_MONITORING  // Temperature monitoring support
+// TEMPERATURE_THROTTLING enables adjusting max current based on temperature
+// if not defined, and TEMPERATURE_MONITORING is enabled, then only
+// TEMPERATURE_AMBIENT_PANIC is checked
+//#define TEMPERATURE_THROTTLING
+
 
 //#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
 
@@ -554,8 +559,8 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #define EOFS_VOLT_OFFSET 20 // 4 bytes
 #define EOFS_VOLT_SCALE_FACTOR 24 // 2 bytes
-#define EOFS_THRESH_AMBIENT 26 // 2 bytes
-#define EOFS_THRESH_IR 28 // 2 bytes
+#define EOFS_PANIC_TEMP 26 // 2 bytes
+//notused#define EOFS_THRESH_IR 28 // 2 bytes
 
 // for I2C RAPI
 #define EOFS_LOCAL_I2C_ADDR 30 // 1 byte
@@ -997,6 +1002,7 @@ public:
   int16_t m_MCP9808_temperature;  // 230 means 23.0C  Using an integer to save on floating point library use
   int16_t m_DS3231_temperature;   // the DS3231 RTC has a built in temperature sensor
   int16_t m_TMP007_temperature;
+  int16_t m_panicTemperature;
 
   TempMonitor() {}
   void Init();
@@ -1012,6 +1018,11 @@ public:
     else m_Flags &= ~TMF_OVERTEMPERATURE;
   }
   int8_t OverTemperature() { return (m_Flags & TMF_OVERTEMPERATURE) ? 1 : 0; }
+  int16_t GetPanicTemperature() { return m_panicTemperature; }
+  void SetPanicTemperature(int16_t panictemp) {
+    m_panicTemperature = panictemp;
+    eeprom_write_word((uint16_t*)EOFS_PANIC_TEMP, panictemp);
+ }
   void SetOverTemperatureShutdown(int8_t tf) {
     if (tf) m_Flags |= (TMF_OVERTEMPERATURE_SHUTDOWN|TMF_OVERTEMPERATURE_LOGGED);
     else m_Flags &= ~TMF_OVERTEMPERATURE_SHUTDOWN;

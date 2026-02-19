@@ -1,5 +1,11 @@
 Change Log
 
+20260218 SCL
+- added TEMPERATURE_THROTTLING - if not enabled, only TEMPERATURE_AMBIENT_PANIC
+  is enforced
+- RAPI: added $FO - set panic temperature, $GO get panic temperature
+  panic temperature is saved to EEPROM. if exceeded, go into EVSE_STATE_OVER_TEMPERATURE
+	
 20260205 SCL
 - OEV6 w/ CGMI - when power is lost, temporarily triggers NO GROUND fault
    delay recording of NO GROUND fault by NO_GND_RECORD_DELAY (currently 2s)
