@@ -220,7 +220,9 @@ SV mv - Set Voltage for power calculations to mv millivolts
  NOTES:
   - only available if VOLTMETER not defined and KWH_RECORDING defined
   - volatile - value is lost, and replaced with VOLTS_FOR_Lx at boot
-SY heartbeatinterval hearbeatcurrentlimit
+SY heartbeatinterval heartbeatcurrentlimit
+ heartbeatinterval - seconds. 0 to disable
+ heartbeatcurrentlimit - max current when no heartbeat within heartbeatinterval
  Response includes heartbeatinterval hearbeatcurrentlimit hearbeattrigger
  hearbeattrigger: 0 - There has never been a missed pulse, 
  2 - there is a missed pulse, and HS is still in current limit
