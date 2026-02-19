@@ -1,5 +1,9 @@
 Change Log
 
+20260219 SCL
+- added $FF L 0|1 command to enable/disable boot lock feature
+- added ECF_BOOT_LOCK_DISABLED
+	
 20260218 SCL
 - added TEMPERATURE_THROTTLING - if not enabled, only TEMPERATURE_AMBIENT_PANIC
   is enforced

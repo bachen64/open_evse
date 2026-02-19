@@ -331,6 +331,11 @@ int EvseRapiProcessor::processCmd()
 	    g_EvseController.EnableStuckRelayChk(u1.u8);
 	    break;
 #endif // ADVPWR
+#ifdef BOOTLOCK
+	  case 'L': // boot lock
+	    g_EvseController.EnableBootLock(u1.u8);
+	    break;
+#endif // BOOTLOCK
 #ifdef TEMPERATURE_MONITORING
 	  case 'T': // temperature monitoring
 	    g_EvseController.EnableTempChk(u1.u8);

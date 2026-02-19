@@ -145,6 +145,7 @@ FF - enable/disable feature
    after its replies. Valid only over a serial connection, DO NOT USE on I2C
   F = GFI self test
   G = Ground check
+  L = boot Lock
   R = stuck Relay check
   T = temperature monitoring
   V = Vent required check
@@ -373,7 +374,7 @@ Z0 closems holdpwm
 
 #ifdef RAPI
 
-#define RAPIVER "5.3.0"
+#define RAPIVER "6.0.0"
 
 #define WIFI_MODE_AP 0
 #define WIFI_MODE_CLIENT 1

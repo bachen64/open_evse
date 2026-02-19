@@ -1087,10 +1087,11 @@ void J1772EVSEController::Init()
   m_wFlags |= ECF_MONO_LCD;
 #endif
 
-  m_wVFlags = ECVF_DEFAULT;
+  setVFlags(ECVF_DEFAULT);
 
 #ifdef BOOTLOCK
-  m_wVFlags |= ECVF_BOOT_LOCK;
+  if (BootLockIsEnabled())
+    setVFlags(ECVF_BOOT_LOCK);
 #endif
 
   m_MaxHwCurrentCapacity = eeprom_read_byte((uint8_t*)EOFS_MAX_HW_CURRENT_CAPACITY);

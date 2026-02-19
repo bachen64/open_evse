@@ -77,13 +77,13 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 #define ECF_GND_CHK_DISABLED   0x0008 // no chk for ground fault
 #define ECF_STUCK_RELAY_CHK_DISABLED 0x0010 // no chk for stuck relay
 #define ECF_AUTO_SVC_LEVEL_DISABLED  0x0020 // auto detect svc level - requires ADVPWR
-// Ability set the EVSE for manual button press to start charging - GoldServe
-#define ECF_AUTO_START_DISABLED 0x0040  // no auto start charging
+//obsolete #define ECF_AUTO_START_DISABLED 0x0040  // no auto start charging
 #define ECF_SERIAL_DBG         0x0080 // enable debugging messages via serial
 #define ECF_MONO_LCD           0x0100 // monochrome LCD backlight
 #define ECF_GFI_TEST_DISABLED  0x0200 // no GFI self test
 #define ECF_TEMP_CHK_DISABLED  0x0400 // no Temperature Monitoring
 #define ECF_CGMI               0x1000 // continuous GMI
+#define ECF_BOOT_LOCK_DISABLED 0x2000 // boot lock
 #define ECF_BUTTON_DISABLED    0x8000 // front panel button disabled
 #define ECF_DEFAULT            0x0000
 
@@ -325,6 +325,12 @@ public:
   void ClrHardFault() { clrVFlags(ECVF_HARD_FAULT); }
   int8_t InHardFault() { return vFlagIsSet(ECVF_HARD_FAULT); }
   int8_t CGMIisEnabled() { return flagIsSet(ECF_CGMI); }
+  int8_t BootLockIsEnabled() { return !flagIsSet(ECF_BOOT_LOCK_DISABLED); }
+  void EnableBootLock(uint8_t tf) {
+    if (!tf) setFlags(ECF_BOOT_LOCK_DISABLED); 
+    else clrFlags(ECF_BOOT_LOCK_DISABLED);
+    SaveEvseFlags();
+  }
   unsigned long GetResetMs();
 
   uint8_t SetMaxHwCurrentCapacity(uint8_t amps);
@@ -394,7 +400,8 @@ public:
   }
   uint8_t IsBootLocked() {
 #ifdef BOOTLOCK
-    return vFlagIsSet(ECVF_BOOT_LOCK) ? 1 : 0;
+    if (flagIsSet(ECF_BOOT_LOCK_DISABLED)) return 0;
+    return vFlagIsSet(ECVF_BOOT_LOCK);
 #else
     return 0;
 #endif
@@ -576,7 +583,7 @@ int GetHearbeatTrigger();
     else clrFlags(ECF_BUTTON_DISABLED);
     SaveEvseFlags();
   }
-  uint8_t ButtonIsEnabled() { return flagIsSet(ECF_BUTTON_DISABLED) ? 0 : 1; }
+  uint8_t ButtonIsEnabled() { return flagIsSet(ECF_BUTTON_DISABLED); }
 #endif // BTN_MENU
 
 #if defined(KWH_RECORDING) && !defined(VOLTMETER)
