@@ -1833,39 +1833,44 @@ if (TempChkEnabled()) {
   }
 
 #ifdef OVERCURRENT_THRESHOLD
-  if (m_EvseState == EVSE_STATE_C) {
-    //testing    m_ChargingCurrent = (m_CurrentCapacity+OVERCURRENT_THRESHOLD+12)*1000L;
-    if (m_ChargingCurrent >= ((m_CurrentCapacity+OVERCURRENT_THRESHOLD)*1000L)) {
-      if (m_OverCurrentStartMs) { // already in overcurrent state
-	if ((millis()-m_OverCurrentStartMs) >= OVERCURRENT_TIMEOUT) {
-	  //
-	  // overcurrent for too long. stop charging and hard fault
-	  //
-	  m_EvseState = EVSE_STATE_OVER_CURRENT;
+  if (OverCurrentCheckIsEnabled()) {
+    if (m_EvseState == EVSE_STATE_C) {
+      // testing    m_ChargingCurrent =
+      // (m_CurrentCapacity+OVERCURRENT_THRESHOLD+12)*1000L;
+      if (m_ChargingCurrent >=
+          ((m_CurrentCapacity + OVERCURRENT_THRESHOLD) * 1000L)) {
+        if (m_OverCurrentStartMs) { // already in overcurrent state
+          if ((millis() - m_OverCurrentStartMs) >= OVERCURRENT_TIMEOUT) {
+            //
+            // overcurrent for too long. stop charging and hard fault
+            //
+            m_EvseState = EVSE_STATE_OVER_CURRENT;
 
-	  m_Pilot.SetState(PILOT_STATE_P12); // Signal the EV to pause
-	  curms = millis();
-	  while ((millis()-curms) < 1000) { // give EV 1s to stop charging
-	    wdt_reset();
-	  }
-	  chargingOff(); // open the EVSE relays hopefully the EV has already discon
+            m_Pilot.SetState(PILOT_STATE_P12); // Signal the EV to pause
+            curms = millis();
+            while ((millis() - curms) < 1000) { // give EV 1s to stop charging
+              wdt_reset();
+            }
+            chargingOff(); // open the EVSE relays hopefully the EV
+                           // has already discon
 
-	  // spin until EV is disconnected
-	  HardFault(1);
-	  
-	  m_OverCurrentStartMs = 0; // clear overcurrent
-	}
+            // spin until EV is disconnected
+            HardFault(1);
+
+            m_OverCurrentStartMs = 0; // clear overcurrent
+          }
+        }
+        else {
+          m_OverCurrentStartMs = millis();
+        }
       }
       else {
-	m_OverCurrentStartMs = millis();
+        m_OverCurrentStartMs = 0; // clear overcurrent
       }
     }
     else {
       m_OverCurrentStartMs = 0; // clear overcurrent
     }
-  }
-  else {
-    m_OverCurrentStartMs = 0; // clear overcurrent
   }
 #endif // OVERCURRENT_THRESHOLD
 #endif // AMMETER

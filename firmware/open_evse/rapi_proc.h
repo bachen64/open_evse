@@ -146,6 +146,7 @@ FF - enable/disable feature
   F = GFI self test
   G = Ground check
   L = boot Lock
+  O = overcurrent check
   R = stuck Relay check
   T = temperature monitoring
   V = Vent required check

@@ -84,6 +84,7 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 #define ECF_TEMP_CHK_DISABLED  0x0400 // no Temperature Monitoring
 #define ECF_CGMI               0x1000 // continuous GMI
 #define ECF_BOOT_LOCK_DISABLED 0x2000 // boot lock
+#define ECF_OVERCURRENT_DISABLED 0x0400 // disable overcurrent check
 #define ECF_BUTTON_DISABLED    0x8000 // front panel button disabled
 #define ECF_DEFAULT            0x0000
 
@@ -329,6 +330,12 @@ public:
   void EnableBootLock(uint8_t tf) {
     if (!tf) setFlags(ECF_BOOT_LOCK_DISABLED); 
     else clrFlags(ECF_BOOT_LOCK_DISABLED);
+    SaveEvseFlags();
+  }
+  int8_t OverCurrentCheckIsEnabled() { return !flagIsSet(ECF_OVERCURRENT_DISABLED); }
+  void EnableOverCurrentCheck(uint8_t tf) {
+    if (!tf) setFlags(ECF_OVERCURRENT_DISABLED); 
+    else clrFlags(ECF_OVERCURRENT_DISABLED);
     SaveEvseFlags();
   }
   unsigned long GetResetMs();
