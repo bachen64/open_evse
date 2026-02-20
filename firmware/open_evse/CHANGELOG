@@ -4,7 +4,10 @@ Change Log
 - added $FF L 0|1 command to enable/disable boot lock feature
   added ECF_BOOT_LOCK_DISABLED
 - added $FF O 0|1 command to enable/disable overcurrent check
-  adde ECF_OVERCURRENT_DISABLED
+  added ECF_OVERCURRENT_DISABLED
+- fix bug: J1772EvseController::ButtonIsEnabled() was returning true when disabled
+- fix bug: when in fault countdown, 16x2 LCD was still counting down on 2nd
+  line of LCD when in menus
 	
 20260218 SCL
 - added TEMPERATURE_THROTTLING - if not enabled, only TEMPERATURE_AMBIENT_PANIC

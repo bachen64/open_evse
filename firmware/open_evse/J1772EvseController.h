@@ -582,6 +582,7 @@ int GetHearbeatTrigger();
   }
   void SetInMenu() { setVFlags(ECVF_UI_IN_MENU); }
   void ClrInMenu() { clrVFlags(ECVF_UI_IN_MENU); }
+  int8_t IsInMenu() { return vFlagIsSet(ECVF_UI_IN_MENU); }
   void SetDelayTimerOnFlag() {setVFlags(ECVF_TIMER_ON); }
   void ClrDelayTimerOnFlag() {clrVFlags(ECVF_TIMER_ON); }
 #ifdef BTN_MENU
@@ -590,7 +591,7 @@ int GetHearbeatTrigger();
     else clrFlags(ECF_BUTTON_DISABLED);
     SaveEvseFlags();
   }
-  uint8_t ButtonIsEnabled() { return flagIsSet(ECF_BUTTON_DISABLED); }
+  uint8_t ButtonIsEnabled() { return !flagIsSet(ECF_BUTTON_DISABLED); }
 #endif // BTN_MENU
 
 #if defined(KWH_RECORDING) && !defined(VOLTMETER)

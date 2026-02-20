@@ -797,12 +797,14 @@ void OnboardDisplay::Update(int8_t updmode)
     if (!g_EvseController.InHardFault() &&
 	((curstate == EVSE_STATE_GFCI_FAULT) || (curstate == EVSE_STATE_NO_GROUND))) {
 #ifdef LCD16X2
-      strcpy(g_sTmp,g_sRetryIn);
-      int resetsec = (int)(g_EvseController.GetResetMs() / 1000ul);
-      if (resetsec >= 0) {
-	sprintf(g_sTmp+sizeof(g_sTmp)-6,g_sHHMMfmt,resetsec / 60,resetsec % 60);
-	strcat(g_sTmp,g_sTmp+sizeof(g_sTmp)-6);
-	LcdPrint(1,g_sTmp);
+      if (!g_EvseController.IsInMenu()) {
+        strcpy(g_sTmp,g_sRetryIn);
+        int resetsec = (int)(g_EvseController.GetResetMs() / 1000ul);
+        if (resetsec >= 0) {
+          sprintf(g_sTmp+sizeof(g_sTmp)-6,g_sHHMMfmt,resetsec / 60,resetsec % 60);
+          strcat(g_sTmp,g_sTmp+sizeof(g_sTmp)-6);
+          LcdPrint(1,g_sTmp);
+        }
       }
 #endif // LCD16X2
       return;
