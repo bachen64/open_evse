@@ -81,6 +81,7 @@ uint8_t Gfi::SelfTest()
     delayMicroseconds(GFI_PULSE_ON_US);
     pinTest.write(0);
     delayMicroseconds(GFI_PULSE_OFF_US);
+    if ((i % 50) == 0) WDT_RESET();
   }
   //  RAPI_SERIAL_PORT.print("GFI ");RAPI_SERIAL_PORT.println(millis()-sms);
 
