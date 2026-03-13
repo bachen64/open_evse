@@ -131,8 +131,6 @@
 
 #endif // !PLATFORMIO
 
-// enable $GI
-#define MCU_ID_LEN 10
 
 // enable watchdog timer
 //#define WATCHDOG

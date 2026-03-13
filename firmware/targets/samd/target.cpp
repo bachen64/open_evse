@@ -7,7 +7,6 @@ THRESH_DATA J1772EVSEController::m_ThreshData = {3948,3539,3258,0,492};
 // mcuid *must* be of size MCU_ID_LEN
 void getMcuId(uint8_t *mcuid)
 {
-  uint8_t uid[16];
   for (uint8_t word = 0; word < 4; word++) {
     uint32_t value;
     switch (word) {
@@ -24,14 +23,10 @@ void getMcuId(uint8_t *mcuid)
         value = *((volatile uint32_t *)0x0080A048);
         break;
     }
-    uid[(word * 4) + 0] = (uint8_t)(value & 0xFF);
-    uid[(word * 4) + 1] = (uint8_t)((value >> 8) & 0xFF);
-    uid[(word * 4) + 2] = (uint8_t)((value >> 16) & 0xFF);
-    uid[(word * 4) + 3] = (uint8_t)((value >> 24) & 0xFF);
-  }
-
-  for (uint8_t i = 0; i < MCU_ID_LEN; i++) {
-    mcuid[i] = uid[i % sizeof(uid)];
+    mcuid[(word * 4) + 0] = (uint8_t)(value & 0xFF);
+    mcuid[(word * 4) + 1] = (uint8_t)((value >> 8) & 0xFF);
+    mcuid[(word * 4) + 2] = (uint8_t)((value >> 16) & 0xFF);
+    mcuid[(word * 4) + 3] = (uint8_t)((value >> 24) & 0xFF);
   }
 }
 #endif // MCU_ID_LEN

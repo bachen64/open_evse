@@ -1,6 +1,9 @@
 #pragma once
 
 
+// enable $GI
+#define MCU_ID_LEN 16 // SAMD ID is 128-bit
+
 #define ADC_RESOLUTION_BITS 12
 #define ADC_MAX 4095
 #define ADC_HALF 2048

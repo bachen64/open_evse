@@ -29,6 +29,9 @@
 #include "./RTClib.h"
 
 
+// enable $GI
+#define MCU_ID_LEN 10
+
 #define ADC_RESOLUTION_BITS 10
 #define ADC_MAX 1023
 #define ADC_HALF 512

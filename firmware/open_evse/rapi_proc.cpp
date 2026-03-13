@@ -739,6 +739,7 @@ int EvseRapiProcessor::processCmd()
         uint8_t mcuid[MCU_ID_LEN];
         getMcuId(mcuid);
         char *s = buffer;
+#ifdef TARGET_M238P
         *(s++) = ' ';
         for (int i=0;i < 6;i++) {
           *(s++) = mcuid[i];
@@ -747,6 +748,12 @@ int EvseRapiProcessor::processCmd()
           sprintf(s,"%02X",mcuid[i]);
           s += 2;
         }
+#else
+        for (int i=0;i < MCU_ID_LEN;i++) {
+          sprintf(s,"%02X",mcuid[i]);
+          s += 2;
+        }
+#endif
         bufCnt = 1; // flag response text output
         rc = 0;
       }

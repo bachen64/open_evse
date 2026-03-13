@@ -303,12 +303,16 @@ GH - get cHarge limit
 
 GI - get MCU ID - requires MCU_ID_LEN to be defined
  response: $OK mcuid
- mcuid: AVR serial number
-        mcuid is 6 ASCII characters followed by 4 hex digits
-        first hex digit = FF for 328P
-  WARNING: mcuid is guaranteed to be unique only for the 328PB. Uniqueness is
-	unknown in 328P. The first 6 characters are ASCII, and the rest are
-	hexadecimal.
+ mcuid: MCU serial number
+  AVR:
+    mcuid is 6 ASCII characters followed by 8 hex digits
+    first hex digit = FF for 328P
+    WARNING: mcuid is guaranteed to be unique only for the 328PB. Uniqueness is
+    unknown in 328P. The first 6 characters are ASCII, and the rest are
+    hexadecimal.
+  SAMD:
+   mcuid is 128-bit number
+   returned as a 32-character hex string
 
 GM - get voltMeter settings
  response: $OK voltcalefactor voltoffset
