@@ -83,7 +83,7 @@ void J1772EVSEController::readAmmeter()
     case 1:
     case 2:
       // Gather the sum-of-the-squares and count how many samples we've collected.
-      sum += (unsigned long)(((long)sample - 512) * ((long)sample - 512));
+      sum += (unsigned long)(((long)sample - ADC_HALF) * ((long)sample - ADC_HALF));
       sample_count++;
       continue;
     case 3:

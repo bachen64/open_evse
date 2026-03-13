@@ -51,15 +51,29 @@ void DigitalPin::init(uint32_t pinnum,int idxjunk,PinMode mode)
 // platform-specific init
 void initTarget()
 {
-  // enable BOD - brown out detection - to prevent lockups when the voltage drops too low
+  //n.b. set BOD via fuses, not this code, as fuses may lock out BOD from being
+  // manipulated in code, anyway
+  // default factory fuse setting is 1.78V BOD enabled
+#ifdef DONTUSE
+    // 1. Prepare the configuration value level 7 = ~1.78V
+    uint32_t bod33_config = SYSCTRL_BOD33_LEVEL(7)     | 
+                            SYSCTRL_BOD33_HYST      | 
+                            SYSCTRL_BOD33_ACTION_RESET | 
+                            SYSCTRL_BOD33_ENABLE;
 
-  uint32_t bod33 = SYSCTRL->BOD33.reg;
+    // 2. Wait for the SYSCTRL to be ready/synchronized 
+    // (BOD33 is often in a different clock domain)
+    while (SYSCTRL->PCLKSR.bit.BOD33RDY == 0);
 
-  bod33 |= SYSCTRL_BOD33_ENABLE;
-  bod33 |= SYSCTRL_BOD33_HYST;
-  bod33 |= SYSCTRL_BOD33_CEN;
-  bod33 &= ~SYSCTRL_BOD33_ACTION_Msk;
-  bod33 |= SYSCTRL_BOD33_ACTION_RESET;
+    // 3. Disable before configuring if it was already running 
+    // (Optional, but ensures Level change takes effect cleanly)
+    SYSCTRL->BOD33.bit.ENABLE = 0;
+    while (SYSCTRL->PCLKSR.bit.BOD33RDY == 0);
 
-  SYSCTRL->BOD33.reg = bod33;
+    // 4. Write the full configuration
+    SYSCTRL->BOD33.reg = bod33_config;
+
+    // 5. Wait for synchronization again to ensure it's active
+    while (SYSCTRL->PCLKSR.bit.BOD33RDY == 0);
+#endif // DONTUSE
 }

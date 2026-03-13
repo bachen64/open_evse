@@ -63,6 +63,8 @@ void Gfi::Reset()
 
 uint8_t Gfi::SelfTest()
 {
+  //  RAPI_SERIAL_PORT.print("GST ");
+  //  uint32_t sms = millis();
   int i;
   // wait for GFI pin to clear
   for (i=0;i < 20;i++) {
@@ -71,19 +73,20 @@ uint8_t Gfi::SelfTest()
     delay(50);
   }
   if (i == 20) return 2;
+  //  RAPI_SERIAL_PORT.print(millis()-sms);
 
   testInProgress = 1;
   testSuccess = 0;
   WDT_RESET();
-  //  uint32_t sms = millis();
-  for(int i=0; !testSuccess && (i < 200); i++) {
+  for(i=0; !testSuccess && (i < 200); i++) {
     pinTest.write(1);
     delayMicroseconds(GFI_PULSE_ON_US);
     pinTest.write(0);
     delayMicroseconds(GFI_PULSE_OFF_US);
     if ((i % 50) == 0) WDT_RESET();
   }
-  //  RAPI_SERIAL_PORT.print("GFI ");RAPI_SERIAL_PORT.println(millis()-sms);
+  //  RAPI_SERIAL_PORT.print(" ST ");RAPI_SERIAL_PORT.print(millis()-sms);
+  //  RAPI_SERIAL_PORT.print(" ");RAPI_SERIAL_PORT.print(i);
 
   // wait for GFI pin to clear
   for (i=0;i < 40;i++) {
@@ -92,6 +95,8 @@ uint8_t Gfi::SelfTest()
     delay(50);
   }
   if (i == 40) return 3;
+  //  RAPI_SERIAL_PORT.print(" w ");RAPI_SERIAL_PORT.print(i);
+  //  RAPI_SERIAL_PORT.print(" s ");RAPI_SERIAL_PORT.println(testSuccess);
 
 
 #ifdef dontneed
@@ -104,6 +109,7 @@ uint8_t Gfi::SelfTest()
 #endif 
 
   m_GfiFault = 0;
+
   testInProgress = 0;
 
   return !testSuccess;
