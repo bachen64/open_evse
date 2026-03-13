@@ -32,19 +32,14 @@ void Gfi::Init(uint8_t v6)
 {
   pin.init(GFI_REG,GFI_IDX,DigitalPin::INP);
   // GFI triggers on rising edge
-  attachInterrupt(GFI_INTERRUPT,gfi_isr,RISING);
+  attachInterrupt(digitalPinToInterrupt(GFI_REG),gfi_isr,RISING);
 
 #ifdef GFI_SELFTEST
-  volatile uint8_t *reg = GFITEST_REG;
-  volatile uint8_t idx  = GFITEST_IDX;
-#ifdef OEV6
-  if (v6) {
-    reg = V6_GFITEST_REG;
-    idx  = V6_GFITEST_IDX;
-  }
-#endif // OEV6
+  uint32_t reg = GFITEST_REG;
+  uint32_t idx  = GFITEST_IDX;
+
   pinTest.init(reg,idx,DigitalPin::OUT);
-#endif
+#endif // GFI_SELFTEST
 
   Reset();
 }
@@ -79,12 +74,15 @@ uint8_t Gfi::SelfTest()
 
   testInProgress = 1;
   testSuccess = 0;
-  for(int i=0; !testSuccess && (i < GFI_TEST_CYCLES); i++) {
+  WDT_RESET();
+  //  uint32_t sms = millis();
+  for(int i=0; !testSuccess && (i < 200); i++) {
     pinTest.write(1);
     delayMicroseconds(GFI_PULSE_ON_US);
     pinTest.write(0);
     delayMicroseconds(GFI_PULSE_OFF_US);
   }
+  //  RAPI_SERIAL_PORT.print("GFI ");RAPI_SERIAL_PORT.println(millis()-sms);
 
   // wait for GFI pin to clear
   for (i=0;i < 40;i++) {
@@ -94,14 +92,15 @@ uint8_t Gfi::SelfTest()
   }
   if (i == 40) return 3;
 
-#ifndef OPENEVSE_2
+
+#ifdef dontneed
   // sometimes getting spurious GFI faults when testing just before closing
   // relay.
   // wait a little more for everything to settle down
   // this delay is needed only if 10uF cap is in the circuit, which makes the circuit
   // temporarily overly sensitive to trips until it discharges
   wdt_delay(1000);
-#endif // OPENEVSE_2
+#endif 
 
   m_GfiFault = 0;
   testInProgress = 0;

@@ -457,10 +457,10 @@ public:
 
 #ifdef RAPI_SERIAL
 class EvseSerialRapiProcessor : public EvseRapiProcessor {
-  int available() { return Serial.available(); }
-  int read() { return Serial.read(); }
-  int write(uint8_t u8) { return Serial.write(u8); }
-  int write(const char *str) { return Serial.write(str); }
+  int available() { return RAPI_SERIAL_PORT.available(); }
+  int read() { return RAPI_SERIAL_PORT.read(); }
+  int write(uint8_t u8) { return RAPI_SERIAL_PORT.write(u8); }
+  int write(const char *str) { return RAPI_SERIAL_PORT.write(str); }
 
 public:
   EvseSerialRapiProcessor();

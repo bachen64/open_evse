@@ -1,18 +1,33 @@
-// Copyright (C) 2015 Sam C. Lin
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// See LICENSE for a copy of the GNU General Public License or see
-// it online at <http://www.gnu.org/licenses/>.
+#include "open_evse.h"
 
-#include "variant.h"
+
+// wdt_init turns off the watchdog timer after we use it
+// to reboot
+
+#ifdef MCU_ID_LEN
+// mcuid *must* be of size MCU_ID_LEN
+#include <avr/boot.h>
+void getMcuId(uint8_t *mcuid)
+{
+  for (int i=0;i < MCU_ID_LEN;i++) {
+    mcuid[i] = boot_signature_byte_get(0x0E + i);
+  }
+}
+#endif // MCU_ID_LEN
+
+
+void wdt_init(void) __attribute__((naked,used)) __attribute__((section(".init3")));
+void wdt_init(void)
+{
+  MCUSR = 0;
+  wdt_disable();
+
+  return;
+}
+
+//                                               A/B B/C C/D D DS
+THRESH_DATA J1772EVSEController::m_ThreshData = {875,780,690,0,260};
+
 
 void DigitalPin::init(volatile uint8_t* _reg,uint8_t idx,PinMode _mode)
 {
@@ -104,4 +119,11 @@ uint16_t AdcPin::read()
   
   // combine the two bytes
   return (high << 8) | low;
+}
+
+
+// platform-specific init
+void initTarget()
+{
+
 }

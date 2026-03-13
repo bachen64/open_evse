@@ -13,7 +13,7 @@
 // See LICENSE for a copy of the GNU General Public License or see
 // it online at <http://www.gnu.org/licenses/>.
 
-#include "variant.h"
+#include "open_evse.h"
 
 typedef struct pp_amps {
   uint16_t adcVal;

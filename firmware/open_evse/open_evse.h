@@ -33,10 +33,10 @@
 
 #include <pins_arduino.h>
 #include "Wire.h"
-#include "variant.h"
 #include "i2caddr.h"
-
+#include "pindefs.h"
 #include "Arduino.h"
+#include "target.h"
 
 #define setBits(flags,bits) (flags |= (bits))
 #define clrBits(flags,bits) (flags &= ~(bits))
@@ -46,8 +46,6 @@
 #endif // !VERSION
 
 #include "Language_default.h"   //Default language should always be included as bottom layer
-
-typedef unsigned long time_t;
 
 //Language preferences: Add your custom languagefile here. See Language_default.h for more info.
 //#include "Language_norwegian.h"
@@ -137,7 +135,7 @@ typedef unsigned long time_t;
 #define MCU_ID_LEN 10
 
 // enable watchdog timer
-#define WATCHDOG
+//#define WATCHDOG
 
 #ifdef PP_AUTO_AMPACITY
 #define STATE_TRANSITION_REQ_FUNC
@@ -192,6 +190,10 @@ extern AutoCurrentCapacityController g_ACCController;
 
 
 //#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
+
+#ifdef MENNEKES_LOCK
+#include "MennekesLock.h"
+#endif
 
 #ifdef AMMETER
 
@@ -274,11 +276,11 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // RGBLCD
 #endif // BTN_MENU
 
-// Option for RTC and DelayTime
+// Option for HAVE_RTC and DelayTime
 // REQUIRES HARDWARE RTC: DS1307 or DS3231 connected via I2C
-//#define RTC // enable RTC & timer functions
+//#define HAVE_RTC // enable RTC & timer functions
 
-#ifdef RTC
+#ifdef HAVE_RTC
 // Option for Delay Timer - GoldServe
 #define DELAYTIMER
 
@@ -286,7 +288,7 @@ extern AutoCurrentCapacityController g_ACCController;
 #define DELAYTIMER_MENU
 #endif
 
-#else // !RTC
+#else // !HAVE_RTC
 // this weird error comes out if RTC not defined, due to a bug in g++
 //D:\git\open_evse\firmware\open_evse\open_evse.ino: In function 'ProcessInputs'//:
 //
@@ -302,27 +304,12 @@ extern AutoCurrentCapacityController g_ACCController;
 //
 ////        (subreg:QI (reg/f:HI 1065) 1)) C:\Users\Geek\AppData\Local\Temp\arduino_build_853681\sketch\rapi_proc.cpp:418 1 {pushqi1}
 #define GPPBUGKLUDGE
-#endif // RTC
+#endif // HAVE_RTC
 
 #ifdef OCPP
 #define AUTH_LOCK 1
 #define RAPI_SERIAL
 #endif // OCPP
-
-
-// if defined, this pin goes HIGH when the EVSE is sleeping, and LOW otherwise
-//#define SLEEP_STATUS_REG &PINB
-//#define SLEEP_STATUS_IDX 4
-
-#ifdef AUTH_LOCK
-// AUTH_LOCK_REG/IDX - use an input pin to control AUTH_LOCK instead of
-// manual function calls
-// digital pin is configured as input with internal pull-up enabled
-// EVSE is locked when input HIGH and unlocked when input LOW
-//#define AUTH_LOCK_REG &PINC
-//#define AUTH_LOCK_IDX 2
-#endif // AUTH_LOCK
-
 
 
 // for stability testing - shorter timeout/higher retry count
@@ -429,7 +416,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // WARNING: ALL DELAYS *MUST* BE SHORTER THAN THIS TIMER OR WE WILL GET INTO
 // AN INFINITE RESET LOOP
-#define WATCHDOG_TIMEOUT WDTO_2S
+#define WATCHDOG_TIMEOUT_MS (WATCHDOG_TIMEOUT_SEC * 1000UL)
 
 #define LCD_MAX_CHARS_PER_LINE 16
 
@@ -463,72 +450,6 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif
 
 //J1772EVSEController
-
-#define CURRENT_PIN 0 // analog current reading pin ADCx
-#define PILOT_PIN 1 // analog pilot voltage reading pin ADCx
-#define PP_PIN 2 // PP_READ - ADC2
-#ifdef VOLTMETER
-// N.B. Note, ADC2 is already used as PP_PIN so beware of potential clashes
-// voltmeter pin is ADC2 on OPENEVSE_2
-#define VOLTMETER_PIN 2 // analog AC Line voltage voltmeter pin ADCx
-#endif // VOLTMETER
-#ifdef OPENEVSE_2
-// This pin must match the last write to CHARGING_PIN, modulo a delay. If
-// it is low when CHARGING_PIN is high, that's a missing ground.
-// If it's high when CHARGING_PIN is low, that's a stuck relay.
-// Auto L1/L2 is done with the voltmeter.
-#define ACLINE1_REG &PIND // OpenEVSE II has only one AC test pin.
-#define ACLINE1_IDX 3
-
-#define CHARGING_REG &PIND // OpenEVSE II has just one relay pin.
-#define CHARGING_IDX 7 // OpenEVSE II has just one relay pin.
-#else // !OPENEVSE_2
-
- // TEST PIN 1 for L1/L2, ground and stuck relay
-#define ACLINE1_REG &PIND
-#define ACLINE1_IDX 3
- // TEST PIN 2 for L1/L2, ground and stuck relay
-#define ACLINE2_REG &PIND
-#define ACLINE2_IDX 4
-
-#define V6_CHARGING_PIN  5
-#define V6_CHARGING_PIN2 6
-
-// digital Relay trigger pin
-#define CHARGING_REG &PINB
-#define CHARGING_IDX 0
-// digital Relay trigger pin for second relay
-#define CHARGING2_REG &PIND
-#define CHARGING2_IDX 7
-//digital Charging pin for AC relay
-#define CHARGINGAC_REG &PINB
-#define CHARGINGAC_IDX 1
-
-// obsolete LED pin
-//#define RED_LED_REG &PIND
-//#define RED_LED_IDX 5
-// obsolete LED pin
-//#define GREEN_LED_REG &PINB
-//#define GREEN_LED_IDX 5
-#endif // OPENEVSE_2
-
-// N.B. if PAFC_PWM is enabled, then pilot pin can be PB1 or PB2
-// if using fast PWM (PAFC_PWM disabled) pilot pin *MUST* be PB2
-#define PILOT_REG &PINB
-#define PILOT_IDX 2
-
-#ifdef MENNEKES_LOCK
-// requires external 12V H-bridge driver such as Polulu 1451
-
-//D11 - MOSI
-#define MENNEKES_LOCK_PINA_REG &PINB
-#define MENNEKES_LOCK_PINA_IDX 3
-
-//D12 - MISO
-#define MENNEKES_LOCK_PINB_REG &PINB
-#define MENNEKES_LOCK_PINB_IDX 4
-#include "MennekesLock.h"
-#endif // MENNEKES_LOCK
 
 
 
@@ -604,25 +525,8 @@ extern AutoCurrentCapacityController g_ACCController;
 #define AC_SAMPLE_MS 20 // 1 cycle @ 60Hz = 16.6667ms @ 50Hz = 20ms
 
 
-// V6 has PD7 tied to ground
-#define V6_ID_REG D
-#define V6_ID_IDX 7
-
 #ifdef GFI
-#define GFI_INTERRUPT 0 // interrupt number 0 = PD2, 1 = PD3
-// interrupt number 0 = PD2, 1 = PD3
-#define GFI_REG &PIND
-#define GFI_IDX 2
-
 #ifdef GFI_SELFTEST
-// pin is supposed to be wrapped around the GFI CT 5+ times
-#define GFITEST_REG &PIND
-#define GFITEST_IDX 6
-// V6 GFI test pin PB0
-#define V6_GFITEST_REG &PINB
-#define V6_GFITEST_IDX 0
-
-
 
 #define GFI_TEST_CYCLES 60
 // GFI pulse should be 50% duty cycle
@@ -667,26 +571,20 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // I2CLCD_PCF8574
 #endif // RGBLCD || I2CLCD
 
-// button sensing pin
-#define BTN_REG &PINC
-#define BTN_IDX 3
 #define BTN_PRESS_SHORT 50  // ms
 #define BTN_PRESS_LONG 500 // ms
 #define BTN_PRESS_VERYLONG 10000
 
 
-#ifdef RTC
+#ifdef HAVE_RTC
 // Default start/stop timers for un-initialized EEPROMs.
 // Makes it easy to compile in default time without need to set it up the first time.
 #define DEFAULT_START_HOUR    0x00 //Start time: 00:05
 #define DEFAULT_START_MIN     0x05
 #define DEFAULT_STOP_HOUR     0x06 //End time: 6:55
 #define DEFAULT_STOP_MIN      0x37
-#endif // RTC
+#endif // HAVE_RTC
 
-// for J1772.ReadPilot()
-// 1x = 114us 20x = 2.3ms 100x = 11.3ms
-#define PILOT_LOOP_CNT 100
 
 #ifdef AMMETER
 // This multiplier is the number of milliamps per A/d converter unit.
@@ -832,14 +730,6 @@ typedef union union4b {
 
 //-- begin class definitions
 
-#ifdef WATCHDOG
-#define WDT_RESET() wdt_reset() // pat the dog
-#define WDT_ENABLE() wdt_enable(WATCHDOG_TIMEOUT)
-#else
-#define WDT_RESET()
-#define WDT_ENABLE()
-#endif // WATCHDOG
-
 // OnboardDisplay.m_bFlags
 #define OBDF_MONO_BACKLIGHT 0x01
 #define OBDF_AMMETER_DIRTY  0x80
@@ -977,9 +867,13 @@ public:
 #endif // GFI
 
 #ifdef TEMPERATURE_MONITORING
-#include "./MCP9808.h"  //  adding the ambient temp sensor to I2C
-#include "./Adafruit_TMP007.h"   //  adding the TMP007 IR I2C sensor
 
+#ifdef MCP9808_IS_ON_I2C
+#include "MCP9808.h"  //  adding the ambient temp sensor to I2C
+#endif 
+#ifdef TMP007_IS_ON_I2C
+#include "./Adafruit_TMP007.h"   //  adding the TMP007 IR I2C sensor
+#endif 
 
 #define TEMPERATURE_NOT_INSTALLED -2560 // fake temp to return when hardware not installed
 #define TEMPMONITOR_UPDATE_INTERVAL 1000ul

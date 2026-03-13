@@ -26,9 +26,6 @@ long g_CycleHalfStart;
 uint8_t g_CycleState;
 #endif
 
-//                                               A/B B/C C/D D DS
-THRESH_DATA J1772EVSEController::m_ThreshData = {875,780,690,0,260};
-
 J1772EVSEController g_EvseController;
 
 #ifdef AMMETER
@@ -66,11 +63,10 @@ void J1772EVSEController::readAmmeter()
   uint16_t last_sample;
   unsigned int sample_count = 0;
   for(unsigned long start = millis(); ((now_ms = millis()) - start) < CURRENT_SAMPLE_INTERVAL; ) {
-    // the A/d is 0 to 1023.
     uint16_t sample = adcCurrent.read();
     // If this isn't the first sample, and if the sign of the value differs from the
     // sign of the previous value, then count that as a zero crossing.
-    if (!is_first_sample && ((last_sample > 512) != (sample > 512))) {
+    if (!is_first_sample && ((last_sample > ADC_HALF) != (sample > ADC_HALF))) {
       // Once we've seen a zero crossing, don't look for one for a little bit.
       // It's possible that a little noise near zero could cause a two-sample
       // inversion.
@@ -146,7 +142,7 @@ uint32_t MovingAverage(uint32_t samp)
 #endif // AMMETER
 
 J1772EVSEController::J1772EVSEController() :
-  adcPilot(PILOT_PIN)
+  adcPilot(PILOT_SENSE_PIN)
 #ifdef CURRENT_PIN
   , adcCurrent(CURRENT_PIN)
 #endif
@@ -204,9 +200,13 @@ void J1772EVSEController::Reboot()
     wdt_delay(3000);
   }
 
+#ifdef TARGET_SAMD
+  NVIC_SystemReset();
+#else // !TARGET_SAMD
   // hardware reset by forcing watchdog to timeout
-  wdt_enable(WDTO_1S);   // enable watchdog timer
+  WDT_ENABLE_1S();   // enable watchdog timer
   delay(1500);
+#endif
 }
 
 
@@ -288,6 +288,10 @@ void J1772EVSEController::chargingOn()
   }
   else {
 #endif // OEV6
+
+#ifdef CHARGINGAC_REG
+    pinChargingAC.write(1);
+#endif
 #ifdef CHARGING_REG
     pinCharging.write(1);
 #endif
@@ -297,9 +301,6 @@ void J1772EVSEController::chargingOn()
 #ifdef OEV6
   }
 #endif // OEV6
-#ifdef CHARGINGAC_REG
-    pinChargingAC.write(1);
-#endif
 
   setVFlags(ECVF_CHARGING_ON);
   
@@ -689,8 +690,16 @@ uint8_t J1772EVSEController::doPost()
   }
 #endif //#ifdef SERDBG
 
+#ifdef CALIBRATE
+  while (1) {
+    CALIB_DATA cd;
+    Calibrate(&cd);
+}
 
-  m_Pilot.SetState(PILOT_STATE_P12); //check to see if EV is plugged in
+#endif // CALIBRATE
+
+
+  m_Pilot.SetState(PILOT_STATE_PWM); //check to see if EV is plugged in
 
   g_OBD.SetRedLed(1);
 #ifdef LCD16X2 //Adafruit RGB LCD
@@ -729,10 +738,10 @@ uint8_t J1772EVSEController::doPost()
     
     m_Pilot.SetState(PILOT_STATE_N12);
     if (reading >= m_ThreshData.m_ThreshAB) {  // IF EV is not connected its Okay to open the relay the do the L1/L2 and ground Check
-      
+
       // save state with both relays off - for stuck relay state
       RelayOff = ReadACPins();
-      
+
       // save state with Relay 1 on 
 #ifdef OEV6
       if (isV6()) {
@@ -750,7 +759,7 @@ uint8_t J1772EVSEController::doPost()
       pinChargingAC.write(1);
 #endif
 
-      delay(RelaySettlingTime);
+      wdt_delay(RelaySettlingTime);
       Relay1 = ReadACPins();
 
 #ifdef OEV6
@@ -1193,10 +1202,10 @@ void J1772EVSEController::Init()
 
 void J1772EVSEController::ReadPilot(uint16_t *plow,uint16_t *phigh)
 {
-  uint16_t pl = 1023;
+  uint16_t pl = ADC_MAX;
   uint16_t ph = 0;
 
-  // 1x = 114us 20x = 2.3ms 100x = 11.3ms
+  //  uint32_t sms = millis();
   for (int i=0;i < PILOT_LOOP_CNT;i++) {
     uint16_t reading = adcPilot.read();  // measures pilot voltage
     
@@ -1207,6 +1216,7 @@ void J1772EVSEController::ReadPilot(uint16_t *plow,uint16_t *phigh)
       pl = reading;
     }
   }
+  //  RAPI_SERIAL_PORT.print("pilotread ");RAPI_SERIAL_PORT.println(millis()-sms);
 
   if (m_Pilot.GetState() != PILOT_STATE_N12) {
     // update prev state
@@ -1245,9 +1255,10 @@ void J1772EVSEController::ReadPilot(uint16_t *plow,uint16_t *phigh)
 void J1772EVSEController::Update(uint8_t forcetransition)
 {
   uint16_t plow;
-  uint16_t phigh = 0xffff;
+  uint16_t phigh = ADC_MAX;
 
   unsigned long curms = millis();
+  WDT_RESET();
 
   if (m_EvseState == EVSE_STATE_DISABLED) {
     m_PrevEvseState = m_EvseState; // cancel state transition
@@ -1993,7 +2004,7 @@ void J1772EVSEController::Calibrate(PCALIB_DATA pcd)
   for (int l=0;l < 2;l++) {
     int reading;
     uint32_t tot = 0;
-    uint16_t plow = 1023;
+    uint16_t plow = ADC_MAX
     uint16_t phigh = 0;
     uint16_t avg = 0;
     m_Pilot.SetState(l ? PILOT_STATE_N12 : PILOT_STATE_P12);
@@ -2027,6 +2038,10 @@ void J1772EVSEController::Calibrate(PCALIB_DATA pcd)
       pavg = avg;
     }
   }
+
+  sprintf(g_sTmp,"p %d %d %d,n %d %d %d",pmax,pavg,pmin,nmax,navg,nmin);
+  RAPI_SERIAL_PORT.println(g_sTmp);
+
   pcd->m_pMax = pmax;
   pcd->m_pAvg = pavg;
   pcd->m_pMin = pmin;

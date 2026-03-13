@@ -33,18 +33,6 @@
 const char RAPI_VER[] PROGMEM = RAPIVER;
 
 
-#ifdef MCU_ID_LEN
-// mcuid *must* be of size MCU_ID_LEN
-#include <avr/boot.h>
-void getMcuId(uint8_t *mcuid)
-{
-  for (int i=0;i < MCU_ID_LEN;i++) {
-    mcuid[i] = boot_signature_byte_get(0x0E + i);
-  }
-}
-#endif // MCU_ID_LEN
-
-
 // convert 2-digit hex string to uint8_t
 uint8_t htou8(const char *s)
 {
@@ -162,7 +150,7 @@ void EvseRapiProcessor::sendBootNotification()
 
 void EvseRapiProcessor::sendEvseState()
 {
-    sprintf(g_sTmp,"%cAT %02x %02x %d %04x",ESRAPI_SOC,g_EvseController.GetState(),g_EvseController.GetPilotState(),g_EvseController.GetCurrentCapacity(),g_EvseController.GetVFlags());
+  sprintf(g_sTmp,"%cAT %02x %02x %d %04x",ESRAPI_SOC,g_EvseController.GetState(),g_EvseController.GetPilotState(),g_EvseController.GetCurrentCapacity(),g_EvseController.GetVFlags());
   appendChk(g_sTmp);
   writeStart();
   write(g_sTmp);
@@ -402,7 +390,7 @@ int EvseRapiProcessor::processCmd()
       }
       break;
 #endif // LCD16X2
-#ifdef RTC
+#ifdef HAVE_RTC
     case '1': // set RTC
       if (tokenCnt == 7) {
 	extern void SetRTC(uint8_t y,uint8_t m,uint8_t d,uint8_t h,uint8_t mn,uint8_t s);
@@ -411,7 +399,7 @@ int EvseRapiProcessor::processCmd()
 	rc = 0;
       }
       break;
-#endif // RTC
+#endif // HAVE_RTC
 #if defined(AMMETER) && defined(ECVF_AMMETER_CAL)
     case '2': // ammeter calibration mode
       if (tokenCnt == 2) {
@@ -799,18 +787,22 @@ int EvseRapiProcessor::processCmd()
       u1.u8 = g_EvseController.GetState();
       u2.u8 = g_EvseController.GetPilotState();
       u3.u16 = g_EvseController.GetVFlags();
+#ifdef TARGET_M328P
       sprintf(buffer,"%02x %ld %02x %04x",u1.u8,g_EvseController.GetElapsedChargeTime(),u2.u8,u3.u16);
+#else
+      sprintf(buffer,"%02x %ld %02x %04x",u1.u8,(long int)g_EvseController.GetElapsedChargeTime(),u2.u8,u3.u16);
+#endif
       bufCnt = 1; // flag response text output
       rc = 0;
       break;
-#ifdef RTC
+#ifdef HAVE_RTC
     case 'T': // get time
       extern void GetRTC(char *buf);
       GetRTC(buffer);
       bufCnt = 1; // flag response text output
       rc = 0;
       break;
-#endif // RTC
+#endif // HAVE_RTC
 #ifdef KWH_RECORDING
     case 'U':
       sprintf(buffer,"%lu %lu",g_EnergyMeter.GetSessionWs(),g_EnergyMeter.GetTotkWh());
@@ -853,7 +845,7 @@ int EvseRapiProcessor::processCmd()
     }
     break;
 #endif //RAPI_T_COMMANDS
-#if defined(RELAY_HOLD_DELAY_TUNING)
+#if defined(RELAY_PWM) && defined(RELAY_HOLD_DELAY_TUNING)
   case 'Z': // reserved op
     switch(*s) {
     case '0': // set relayCloseMs
@@ -1053,6 +1045,7 @@ EvseSerialRapiProcessor::EvseSerialRapiProcessor()
 
 void EvseSerialRapiProcessor::init()
 {
+  RAPI_SERIAL_PORT.begin(SERIAL_BAUD);
   EvseRapiProcessor::init();
 }
 #endif // RAPI_SERIAL
@@ -1085,11 +1078,11 @@ EvseI2cRapiProcessor g_EIRP;
 void RapiInit()
 {
 #ifdef RAPI_SERIAL
-  g_ESRP.init();
 #ifdef GPPBUGKLUDGE
   static char g_rapiSerialBuffer[ESRAPI_BUFLEN];
   g_ESRP.setBuffer(g_rapiSerialBuffer);
 #endif // GPPBUGKLUDGE
+  g_ESRP.init();
 #endif // RAPI_SERIAL
 #ifdef RAPI_I2C
   g_EIRP.init();

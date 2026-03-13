@@ -14,16 +14,31 @@
 // it online at <http://www.gnu.org/licenses/>.
 
 #pragma once
+#include <avr/io.h>
+#include <avr/eeprom.h>
+#include <avr/wdt.h>
+#include <avr/pgmspace.h>
+#include <pins_arduino.h>
 #include <avr/wdt.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#if defined(ARDUINO) && (ARDUINO >= 100)
 #include "Arduino.h"
-#else
-#include "WProgram.h" // shouldn't need this but arduino sometimes messes up and puts inside an #ifdef
-#endif // ARDUINO
+#include "./Wire.h"
+#include "./RTClib.h"
+
+
+#define ADC_RESOLUTION_BITS 10
+#define ADC_MAX 1023
+#define ADC_HALF 512
+
+// for J1772.ReadPilot()
+// 1x = 114us 20x = 2.3ms 100x = 11.3ms
+#define PILOT_LOOP_CNT 100
+
+
+typedef unsigned long time_t;
 
 #ifdef __cplusplus
 class CriticalSection {
@@ -90,6 +105,24 @@ example
 //
 
 #ifdef __cplusplus
+
+void getMcuId(uint8_t *mcuid);
+
+#if WATCHDOG_TIMEOUT_SEC != 2
+#error "unsupported WATCHDOG_TIMEOUT_SEC value"
+#endif
+
+#ifdef WATCHDOG
+#define WDT_RESET() wdt_reset()
+#define WDT_ENABLE() wdt_enable(WDTO_2S)
+#define WDT_ENABLE_1S() wdt_enable(WDTO_1S)
+#define WDT_DISABLE() wdt_disable()
+#else
+#define WDT_RESET()
+#define WDT_ENABLE()
+#define WDT_ENABLE_1S()
+#define WDT_DISABLE()
+#endif // WATCHDOG
 
 //
 // begin digitalPin class
@@ -183,4 +216,5 @@ public:
 // end digital pin class
 //
 
+void initTarget();
 #endif // __cplusplus

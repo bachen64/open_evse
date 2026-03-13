@@ -41,25 +41,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#include <avr/io.h>
-#include <avr/eeprom.h>
-#include <avr/wdt.h>
-#include <avr/pgmspace.h>
-#include <pins_arduino.h>
-#include "./Wire.h"
-#include "./RTClib.h"
 #include "open_evse.h"
-
-// if using I2CLCD_PCF8574 uncomment below line  and comment out LiquidTWI2.h above
-//#include "./LiquidCrystal_I2C.h"
-#ifdef TEMPERATURE_MONITORING
-  #ifdef MCP9808_IS_ON_I2C
-  #include "MCP9808.h"  //  adding the ambient temp sensor to I2C
-  #endif 
-  #ifdef TMP007_IS_ON_I2C
-  #include "./Adafruit_TMP007.h"   //  adding the TMP007 IR I2C sensor
-  #endif 
-#endif // TEMPERATURE_MONITORING
 
 
 #ifdef BTN_MENU
@@ -126,7 +108,7 @@ Menu *g_SettingsMenuList[] = {
 Menu *g_SetupMenuList[] = {
 #ifdef NOSETUP_MENU
   &g_MaxCurrentMenu,
-#ifdef RTC
+#ifdef HAVE_RTC
   &g_RTCMenu,
 #endif
 #else // !NOSETUP_MENU
@@ -165,7 +147,7 @@ char g_sTmp[TMP_BUF_SIZE];
 OnboardDisplay g_OBD;
 
 // Instantiate RTC and Delay Timer - GoldServe
-#ifdef RTC
+#ifdef HAVE_RTC
 RTC_DS1307 g_RTC;
 
 #if defined(RAPI)
@@ -177,7 +159,7 @@ void GetRTC(char *buf) {
   sprintf(buf,"%d %d %d %d %d %d",t.year()-2000,t.month(),t.day(),t.hour(),t.minute(),t.second());
 }
 #endif // RAPI
-#endif // RTC
+#endif // HAVE_RTC
 #ifdef DELAYTIMER
 DelayTimer g_DelayTimer;
 #ifdef DELAYTIMER_MENU
@@ -205,17 +187,10 @@ AutoCurrentCapacityController g_ACCController;
 // *do not* call this before WDT_ENABLE() is called
 void wdt_delay(uint32_t ms)
 {
+  uint32_t startms = millis();
   do {
     WDT_RESET();
-    if (ms > WATCHDOG_TIMEOUT/2) {
-      delay(WATCHDOG_TIMEOUT/2);
-      ms -= WATCHDOG_TIMEOUT/2;
-    }
-    else {
-      delay(ms);
-      ms = 0;
-    }
-  } while(ms);
+  } while((millis()-startms) < ms);
 }
 
 static inline void wiresend(uint8_t x) {
@@ -251,18 +226,6 @@ char *u2a(unsigned long x,int8_t digits)
   return s;
 }
 
-// wdt_init turns off the watchdog timer after we use it
-// to reboot
-
-void wdt_init(void) __attribute__((naked,used)) __attribute__((section(".init3")));
-void wdt_init(void)
-{
-  MCUSR = 0;
-  wdt_disable();
-
-  return;
-}
-
 
 #ifdef TEMPERATURE_MONITORING
 
@@ -296,7 +259,7 @@ void TempMonitor::Read()
 #endif
 
        
-#ifdef RTC
+#ifdef HAVE_RTC
 #ifdef OPENEVSE_2
     m_DS3231_temperature = TEMPERATURE_NOT_INSTALLED;  // OpenEVSE II does not use the DS3231
 #else // !OPENEVSE_2
@@ -327,7 +290,7 @@ void TempMonitor::Read()
       m_DS3231_temperature = TEMPERATURE_NOT_INSTALLED;
     
 #endif // OPENEVSE_2
-#endif // RTC
+#endif // HAVE_RTC
 
     m_LastUpdate = curms;
   }
@@ -811,7 +774,7 @@ void OnboardDisplay::Update(int8_t updmode)
     }
 #endif // GFI
 
-#ifdef RTC
+#ifdef HAVE_RTC
     DateTime currentTime = g_RTC.now();
 #endif
 
@@ -883,7 +846,7 @@ void OnboardDisplay::Update(int8_t updmode)
 	}
 #endif
 
-#ifdef RTC	
+#ifdef HAVE_RTC	
 	if ( g_TempMonitor.m_DS3231_temperature != TEMPERATURE_NOT_INSTALLED) {
 	  sprintf(g_sTmp,tempfmt,g_TempMonitor.m_DS3231_temperature/10, abs(g_TempMonitor.m_DS3231_temperature % 10));      //  sensor built into the DS3231 RTC Chip
 	  LcdPrint(5,1,g_sTmp);
@@ -926,12 +889,12 @@ void OnboardDisplay::Update(int8_t updmode)
       int m = (elapsedTime % 3600) / 60;
       int s = elapsedTime % 60;
       sprintf(g_sTmp,"%02d:%02d:%02d",h,m,s);
-#ifdef RTC
+#ifdef HAVE_RTC
       g_sTmp[8]=' ';
       g_sTmp[9]=' ';
       g_sTmp[10]=' ';
       sprintf(g_sTmp+11,g_sHHMMfmt,currentTime.hour(),currentTime.minute());
-#endif //RTC
+#endif //HAVE_RTC
       LcdPrint(1,g_sTmp);
 #endif // KWH_RECORDING
 #ifdef TEMPERATURE_MONITORING
@@ -2413,12 +2376,14 @@ void DelayTimer::PrintTimerIcon(){
 void ProcessInputs()
 {
 #ifdef RAPI
+  WDT_RESET();
   RapiDoCmd();
 #endif
 #ifdef BTN_MENU
   g_BtnHandler.ChkBtn();
 #endif
 #ifdef TEMPERATURE_MONITORING
+  WDT_RESET();
   g_TempMonitor.Read();  //   update temperatures once per second
 #endif
 }
@@ -2480,11 +2445,13 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
 
 void setup()
 {
-  wdt_disable();
+  WDT_DISABLE();
   
   delay(400);  // give I2C devices time to be ready before running code that wants to initialize I2C devices.  Otherwise a hang can occur upon powerup.
   
   Serial.begin(SERIAL_BAUD);
+
+  initTarget();
 
 #ifdef BTN_MENU
   g_BtnHandler.init();
