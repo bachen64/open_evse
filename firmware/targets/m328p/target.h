@@ -41,6 +41,44 @@
 #define PILOT_LOOP_CNT 100
 
 
+
+// This multiplier is the number of milliamps per A/d converter unit.
+
+// First, you need to select the burden resistor for the CT. You choose the largest value possible such that
+// the maximum peak-to-peak voltage for the current range is 5 volts. To obtain this value, divide the maximum
+// outlet current by the Te. That value is the maximum CT current RMS. You must convert that to P-P, so multiply
+// by 2*sqrt(2). Divide 5 by that value and select the next lower standard resistor value. For the reference
+// design, Te is 1018 and the outlet maximum is 30. 5/((30/1018)*2*sqrt(2)) = 59.995, so a 56 ohm resistor
+// is called for. Call this value Rb (burden resistor).
+
+// Next, one must use Te and Rb to determine the volts-per-amp value. Note that the readCurrent()
+// method calculates the RMS value before the scaling factor, so RMS need not be taken into account.
+// (1 / Te) * Rb = Rb / Te = Volts per Amp. For the reference design, that's 55.009 mV.
+// Each count of the A/d converter is 4.882 mV (5/1024). V/A divided by V/unit is unit/A. For the reference
+// design, that's 11.26. But we want milliamps per unit, so divide that into 1000 to get 88.7625558. Round near...
+//#define DEFAULT_CURRENT_SCALE_FACTOR 106 // for RB = 47 - recommended for 30A max
+//#define DEFAULT_CURRENT_SCALE_FACTOR 184 // for RB = 27 - recommended for 50A max
+// Craig K, I arrived at 213 by scaling my previous multiplier of 225 down by the ratio of my panel meter reading of 28 with the OpenEVSE uncalibrated reading of 29.6
+// then upped the scale factor to 220 after fixing the zero offset by subtracing 900ma
+//#define DEFAULT_CURRENT_SCALE_FACTOR 220 // for RB = 22 - measured by Craig on his new OpenEVSE V3
+// NOTE: setting DEFAULT_CURRENT_SCALE_FACTOR TO 0 will disable the ammeter
+// until it is overridden via RAPI
+//#define DEFAULT_CURRENT_SCALE_FACTOR 220   // Craig K, average of three OpenEVSE controller calibrations
+#ifdef OPENEVSE_2
+#define DEFAULT_CURRENT_SCALE_FACTOR 186   // OpenEVSE II with a 27 Ohm burden resistor, after a 2-point calibration at 12.5A and 50A
+#else
+#define DEFAULT_CURRENT_SCALE_FACTOR 220   // OpenEVSE v2.5 and v3 with a 22 Ohm burden resistor (note that the schematic may say 28 Ohms by mistake)
+#endif
+
+// subtract this from ammeter current reading to correct zero offset
+#ifdef OPENEVSE_2
+#define DEFAULT_AMMETER_CURRENT_OFFSET 230 // OpenEVSE II with a 27 Ohm burden resistor, after a 2-point calibration at 12.5A and 50A
+#else
+#define DEFAULT_AMMETER_CURRENT_OFFSET 0   // OpenEVSE v2.5 and v3 with a 22 Ohm burden resistor.  Could use a more thorough calibration exercise to nails this down.
+#endif
+
+
+
 typedef unsigned long time_t;
 
 #ifdef __cplusplus

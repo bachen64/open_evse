@@ -8,6 +8,10 @@
 #define ADC_MAX 4095
 #define ADC_HALF 2048
 
+#define DEFAULT_CURRENT_SCALE_FACTOR    42
+#define DEFAULT_AMMETER_CURRENT_OFFSET 412
+
+
 // for J1772.ReadPilot()
 // 15 = ~13ms
 #define PILOT_LOOP_CNT 15

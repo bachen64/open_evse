@@ -1062,8 +1062,8 @@ void J1772EVSEController::Init()
 #endif
 
 #ifdef AMMETER
-  m_AmmeterCurrentOffset = eeprom_read_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET);
-  m_CurrentScaleFactor = eeprom_read_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR);
+  m_AmmeterCurrentOffset = (int16_t)eeprom_read_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET);
+  m_CurrentScaleFactor = (int16_t)eeprom_read_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR);
   
   if (m_AmmeterCurrentOffset == (int16_t)0xffff) {
     m_AmmeterCurrentOffset = DEFAULT_AMMETER_CURRENT_OFFSET;
@@ -1074,6 +1074,20 @@ void J1772EVSEController::Init()
   
   m_AmmeterReading = 0;
   m_ChargingCurrent = 0;
+
+#ifdef AMMETER_TEST
+  // for debugging only
+  while (1) {
+    char s[80];
+    readAmmeter();
+      long instantma = m_AmmeterReading*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+      sprintf(s,"%u %u %d\n",(unsigned)adcCurrent.read(),m_AmmeterReading,instantma);
+    RAPI_SERIAL_PORT.print(s);
+    delay(250);
+  }
+#endif // AMMETER_TEST
+
+
 #ifdef OVERCURRENT_THRESHOLD
   m_OverCurrentStartMs = 0;
 #endif //OVERCURRENT_THRESHOLD

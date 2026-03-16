@@ -264,8 +264,8 @@ class J1772EVSEController {
 #ifdef AMMETER
   unsigned long m_AmmeterReading;
   int32_t m_ChargingCurrent;
-  int16_t m_AmmeterCurrentOffset;
-  int16_t m_CurrentScaleFactor;
+  int32_t m_AmmeterCurrentOffset;
+  int32_t m_CurrentScaleFactor;
 #ifdef CHARGE_LIMIT
   uint8_t m_chargeLimitkWh; // kWh to extend session
   uint32_t m_chargeLimitTotWs; // total Ws limit
@@ -487,11 +487,11 @@ int GetHearbeatTrigger();
 
   int16_t GetAmmeterCurrentOffset() { return m_AmmeterCurrentOffset; }
   int16_t GetCurrentScaleFactor() { return m_CurrentScaleFactor; }
-  void SetAmmeterCurrentOffset(int16_t offset) {
+  void SetAmmeterCurrentOffset(int32_t offset) {
     m_AmmeterCurrentOffset = offset;
     eeprom_write_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET,offset);
   }
-  void SetCurrentScaleFactor(int16_t scale) {
+  void SetCurrentScaleFactor(int32_t scale) {
     m_CurrentScaleFactor = scale;
     eeprom_write_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR,scale);
   }

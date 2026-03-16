@@ -24,7 +24,9 @@
 // interrupt service routing
 void gfi_isr()
 {
+#ifndef BYPASS_GFI
   g_EvseController.SetGfiTripped();
+#endif
 }
 
 
@@ -63,6 +65,9 @@ void Gfi::Reset()
 
 uint8_t Gfi::SelfTest()
 {
+#ifdef BYPASS_GFI
+  return 0;
+#endif
   //  RAPI_SERIAL_PORT.print("GST ");
   //  uint32_t sms = millis();
   int i;
