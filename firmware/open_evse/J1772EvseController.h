@@ -489,11 +489,11 @@ int GetHearbeatTrigger();
   int16_t GetCurrentScaleFactor() { return m_CurrentScaleFactor; }
   void SetAmmeterCurrentOffset(int32_t offset) {
     m_AmmeterCurrentOffset = offset;
-    eeprom_write_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET,offset);
+    eeprom_write_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET,((int16_t)offset));
   }
   void SetCurrentScaleFactor(int32_t scale) {
     m_CurrentScaleFactor = scale;
-    eeprom_write_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR,scale);
+    eeprom_write_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR,((int16_t)scale));
   }
 #ifdef ECVF_AMMETER_CAL
   uint8_t AmmeterCalEnabled() { 

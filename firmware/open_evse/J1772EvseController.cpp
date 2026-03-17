@@ -56,6 +56,9 @@ void J1772EVSEController::readAmmeter()
 {
   WDT_RESET();
 
+#ifdef AMMETER_TEST
+  uint32_t max = 0;
+#endif
   unsigned long sum = 0;
   uint8_t zero_crossings = 0;
   unsigned long last_zero_crossing_time = 0, now_ms;
@@ -64,6 +67,9 @@ void J1772EVSEController::readAmmeter()
   unsigned int sample_count = 0;
   for(unsigned long start = millis(); ((now_ms = millis()) - start) < CURRENT_SAMPLE_INTERVAL; ) {
     uint16_t sample = adcCurrent.read();
+#ifdef AMMETER_TEST
+    if (max < sample) max = sample;
+#endif
     // If this isn't the first sample, and if the sign of the value differs from the
     // sign of the previous value, then count that as a zero crossing.
     if (!is_first_sample && ((last_sample > ADC_HALF) != (sample > ADC_HALF))) {
@@ -91,6 +97,14 @@ void J1772EVSEController::readAmmeter()
       // But additionally, that value must be scaled to a real current value.
       // we will do that elsewhere
       m_AmmeterReading = ulong_sqrt(sum / sample_count);
+#ifdef AMMETER_TEST
+      {
+        char s[80];
+        long instantma = m_AmmeterReading*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+        sprintf(s,"%u %u %d",max,m_AmmeterReading,instantma);
+        RAPI_SERIAL_PORT.println(s);
+      }
+#endif
       return;
     }
   }
@@ -1075,7 +1089,7 @@ void J1772EVSEController::Init()
   m_AmmeterReading = 0;
   m_ChargingCurrent = 0;
 
-#ifdef AMMETER_TEST
+#ifdef AMMETER_TESTtt
   // for debugging only
   while (1) {
     char s[80];

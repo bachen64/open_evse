@@ -59,15 +59,25 @@ uint8_t htou8(const char *s)
   return u;
 }
 
-// convert decimal string to uint32_t
-uint32_t dtou32(const char *s)
+
+// convert decimal string to int32_t
+uint32_t dtoi32(const char *s)
 {
-  uint32_t u = 0;
-  while (*s) {
-    u *= 10;
-    u += *(s++) - '0';
+  int minus;
+  int32_t i = 0;
+  if (*s == '-') {
+    minus = 1;
+    s++;
   }
-  return u;
+  else minus = 0;
+  
+  while (*s) {
+    i *= 10;
+    i += *(s++) - '0';
+  }
+  if (minus) i = -i;
+
+  return i;
 }
 
 #ifdef RAPI_I2C
@@ -273,7 +283,7 @@ int EvseRapiProcessor::processCmd()
 #ifdef LCD16X2
     case 'B': // LCD backlight
       if (tokenCnt == 2) {
-	g_OBD.LcdSetBacklightColor(dtou32(tokens[1]));
+	g_OBD.LcdSetBacklightColor(dtoi32(tokens[1]));
 	rc = 0;
       }
       break;
@@ -346,7 +356,7 @@ int EvseRapiProcessor::processCmd()
 #ifdef TEMPERATURE_MONITORING
     case 'O': // print to LCD
       if (tokenCnt == 2) {
-        u1.i16 = dtou32(tokens[1]);
+        u1.i16 = dtoi32(tokens[1]);
         if (u1.i16 > 0) {
           g_TempMonitor.SetPanicTemperature(u1.i16);
           rc = 0;
@@ -357,8 +367,8 @@ int EvseRapiProcessor::processCmd()
 #ifdef LCD16X2
     case 'P': // print to LCD
       if ((tokenCnt >= 4) && !g_EvseController.InHardFault()) {
-	u1.u = dtou32(tokens[1]); // x
-	u2.u = dtou32(tokens[2]); // y
+	u1.u = dtoi32(tokens[1]); // x
+	u2.u = dtoi32(tokens[2]); // y
 	// now restore the spaces that were replaced w/ nulls by tokenizing
 	for (u3.i=4;u3.i < tokenCnt;u3.i++) {
 	  *(tokens[u3.i]-1) = ' ';
@@ -394,8 +404,8 @@ int EvseRapiProcessor::processCmd()
     case '1': // set RTC
       if (tokenCnt == 7) {
 	extern void SetRTC(uint8_t y,uint8_t m,uint8_t d,uint8_t h,uint8_t mn,uint8_t s);
-	SetRTC(dtou32(tokens[1]),dtou32(tokens[2]),dtou32(tokens[3]),
-	       dtou32(tokens[4]),dtou32(tokens[5]),dtou32(tokens[6]));
+	SetRTC(dtoi32(tokens[1]),dtoi32(tokens[2]),dtoi32(tokens[3]),
+	       dtoi32(tokens[4]),dtoi32(tokens[5]),dtoi32(tokens[6]));
 	rc = 0;
       }
       break;
@@ -412,7 +422,7 @@ int EvseRapiProcessor::processCmd()
     case '3': // set time limit
       if (tokenCnt == 2) {
 	if (g_EvseController.LimitsAllowed()) {
-	  g_EvseController.SetTimeLimit15(dtou32(tokens[1]));
+	  g_EvseController.SetTimeLimit15(dtoi32(tokens[1]));
 	  if (!g_OBD.UpdatesDisabled()) g_OBD.Update(OBD_UPD_FORCE);
 	  rc = 0;
 	}
@@ -422,7 +432,7 @@ int EvseRapiProcessor::processCmd()
 #if defined(AUTH_LOCK) && !defined(AUTH_LOCK_REG)
     case '4': // auth lock
       if (tokenCnt == 2) {
-	g_EvseController.AuthLock((int8_t)dtou32(tokens[1]),1);
+	g_EvseController.AuthLock((int8_t)dtoi32(tokens[1]),1);
 	rc = 0;
       }
       break;
@@ -453,8 +463,8 @@ int EvseRapiProcessor::processCmd()
 #ifdef AMMETER
     case 'A':
       if (tokenCnt == 3) {
-	g_EvseController.SetCurrentScaleFactor(dtou32(tokens[1]));
-	g_EvseController.SetAmmeterCurrentOffset(dtou32(tokens[2]));
+	g_EvseController.SetCurrentScaleFactor(dtoi32(tokens[1]));
+	g_EvseController.SetAmmeterCurrentOffset(dtoi32(tokens[2]));
 	rc = 0;
       }
       break;
@@ -474,7 +484,7 @@ int EvseRapiProcessor::processCmd()
 #endif // BOOTLOCK
     case 'C': // current capacity
       if ((tokenCnt == 2) || (tokenCnt == 3)) {
-	u2.u8 = dtou32(tokens[1]);
+	u2.u8 = dtoi32(tokens[1]);
 	if ((tokenCnt == 3) && (*tokens[2] == 'M')) {
 	  rc = g_EvseController.SetMaxHwCurrentCapacity(u2.u8);
 	  sprintf(buffer,"%d",(int)g_EvseController.GetMaxHwCurrentCapacity());
@@ -510,7 +520,7 @@ int EvseRapiProcessor::processCmd()
     case 'H': // cHarge limit
       if (tokenCnt == 2) {
 	if (g_EvseController.LimitsAllowed()) {
-	  g_EvseController.SetChargeLimitkWh(dtou32(tokens[1]));
+	  g_EvseController.SetChargeLimitkWh(dtoi32(tokens[1]));
 	  if (!g_OBD.UpdatesDisabled()) g_OBD.Update(OBD_UPD_FORCE);
 	  rc = 0;
 	}
@@ -519,7 +529,7 @@ int EvseRapiProcessor::processCmd()
 #endif // CHARGE_LIMIT
 #ifdef KWH_RECORDING
     case 'K': // set accumulated kwh
-      g_EnergyMeter.SetTotkWh(dtou32(tokens[1]));
+      g_EnergyMeter.SetTotkWh(dtoi32(tokens[1]));
       g_EnergyMeter.SaveTotkWh();
       rc = 0;
       break;
@@ -547,7 +557,7 @@ int EvseRapiProcessor::processCmd()
 #ifdef VOLTMETER
     case 'M':
       if (tokenCnt == 3) {
-        g_EvseController.SetVoltmeter(dtou32(tokens[1]),dtou32(tokens[2]));
+        g_EvseController.SetVoltmeter(dtoi32(tokens[1]),dtoi32(tokens[2]));
 	rc = 0;
       }
       break;
@@ -556,10 +566,10 @@ int EvseRapiProcessor::processCmd()
     case 'T': // timer
       if (tokenCnt == 5) {
 	extern DelayTimer g_DelayTimer;
-	u1.u8 = (uint8_t)dtou32(tokens[1]);
-	u2.u8 = (uint8_t)dtou32(tokens[2]);
-	u3.u8 = (uint8_t)dtou32(tokens[3]);
-	u4.u8 = (uint8_t)dtou32(tokens[4]);
+	u1.u8 = (uint8_t)dtoi32(tokens[1]);
+	u2.u8 = (uint8_t)dtoi32(tokens[2]);
+	u3.u8 = (uint8_t)dtoi32(tokens[3]);
+	u4.u8 = (uint8_t)dtoi32(tokens[4]);
 	if ((u1.u8 == 0) && (u2.u8 == 0) && (u3.u8 == 0) && (u4.u8 == 0)) {
 	  g_DelayTimer.Disable();
 	}
@@ -576,7 +586,7 @@ int EvseRapiProcessor::processCmd()
 #if defined(KWH_RECORDING) && !defined(VOLTMETER)
     case 'V': // set voltage
       if (tokenCnt == 2) {
-        g_EvseController.SetMV(dtou32(tokens[1]));
+        g_EvseController.SetMV(dtoi32(tokens[1]));
 	rc = 0;
       }
       break;
@@ -589,15 +599,15 @@ int EvseRapiProcessor::processCmd()
       }
       else if (tokenCnt == 3) { //This is a full HEARTBEAT_SUPERVISION setpoint command with both parameters
 	    rc = 0;
-        u1.u16 = (uint16_t)dtou32(tokens[1]);	// HS Interval in seconds.  0 = disabled
-        u2.u8 = (uint8_t)dtou32(tokens[2]);	// HS fallback current, in amperes 
+        u1.u16 = (uint16_t)dtoi32(tokens[1]);	// HS Interval in seconds.  0 = disabled
+        u2.u8 = (uint8_t)dtoi32(tokens[2]);	// HS fallback current, in amperes 
 		if (u1.u16 == 0) { //Test for deactivation {
           rc = g_EvseController.HsRestoreAmpacity();
 		}
 		rc |= g_EvseController.HeartbeatSupervision(u1.u16, u2.u8);
       }
       else if (tokenCnt == 2) { //This is a command to ack a heartbeat supervision miss
-        u1.u8 = (uint8_t)dtou32(tokens[1]); //Magic cookie
+        u1.u8 = (uint8_t)dtoi32(tokens[1]); //Magic cookie
         rc = g_EvseController.HsAckMissedPulse(u1.u8);
       }
       else { //Invalid number of tokens, return 1
@@ -842,7 +852,7 @@ int EvseRapiProcessor::processCmd()
 #ifdef FAKE_CHARGING_CURRENT
     case '0': // set fake charging current
       if (tokenCnt == 2) {
-	g_EvseController.SetChargingCurrent(dtou32(tokens[1])*1000);
+	g_EvseController.SetChargingCurrent(dtoi32(tokens[1])*1000);
 	g_OBD.SetAmmeterDirty(1);
 	g_OBD.Update(OBD_UPD_FORCE);
 	rc = 0;
@@ -857,8 +867,8 @@ int EvseRapiProcessor::processCmd()
     switch(*s) {
     case '0': // set relayCloseMs
       if (tokenCnt == 3) {
-	u1.u8 = dtou32(tokens[1]);
-	u2.u8 = dtou32(tokens[2]);
+	u1.u8 = dtoi32(tokens[1]);
+	u2.u8 = dtoi32(tokens[2]);
 	g_EvseController.setPwmPinParms(u1.u8,u2.u8);
 	sprintf(g_sTmp,"\nZ0 %u %u",(unsigned)u1.u8,(unsigned)u2.u8);
 	Serial.println(g_sTmp);
