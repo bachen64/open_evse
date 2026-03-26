@@ -31,8 +31,9 @@ class EnergyMeter {
   void endSession();
 
 public:
-  EnergyMeter();
+  EnergyMeter() {}
 
+  void Init();
   void Update();
   void SaveTotkWh();
   void SetTotkWh(uint32_t whtot) { m_wattHoursTot = whtot; }

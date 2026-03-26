@@ -38,7 +38,8 @@
 //reserved #define EVSE_STATE_PILOT_ERROR 0x0C // pilot self test error
 //reserved #define EVSE_STATE_TEMP_SENSOR_FAULT 0x0D // temp sensor dead
 #define EVSE_STATE_RELAY_CLOSURE_FAULT 0x0E
-#define EVSE_FAULT_STATE_END EVSE_STATE_RELAY_CLOSURE_FAULT
+#define EVSE_STATE_EEPROM_FAILURE 0x0F // SAMD only
+#define EVSE_FAULT_STATE_END EVSE_STATE_EEPROM_FAILURE
            
 #define EVSE_STATE_SLEEPING 0xfe // waiting for timer
 #define EVSE_STATE_DISABLED 0xff // disabled
@@ -299,6 +300,9 @@ public:
 
   uint8_t GetState() { 
     return m_EvseState; 
+  }
+  void SetState(uint8_t state) {
+    m_EvseState = state;
   }
   uint8_t GetPrevState() { 
     return m_PrevEvseState; 

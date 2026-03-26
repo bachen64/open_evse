@@ -1,5 +1,7 @@
 #include "open_evse.h"
 
+ExternalEEPROM g_eeprom;
+
 //                                               A/B  B/C  C/D  D DS
 THRESH_DATA J1772EVSEController::m_ThreshData = {3948,3539,3258,0,492};
 
@@ -51,6 +53,15 @@ void DigitalPin::init(uint32_t pinnum,int idxjunk,PinMode mode)
 // platform-specific init
 void initTarget()
 {
+  Wire.begin();
+  g_eeprom.setMemoryType(512);
+  if (g_eeprom.begin() == false) {
+    g_EvseController.SetState(EVSE_STATE_EEPROM_FAILURE);
+    RapiInit();
+    RapiSendBootNotification();
+    while(1);
+  }
+
   //n.b. set BOD via fuses, not this code, as fuses may lock out BOD from being
   // manipulated in code, anyway
   // default factory fuse setting is 1.78V BOD enabled

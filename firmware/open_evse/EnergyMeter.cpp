@@ -5,7 +5,7 @@
 EnergyMeter g_EnergyMeter;
 
 
-EnergyMeter::EnergyMeter()
+void EnergyMeter::Init()
 {
   m_bFlags = 0;
   m_wattSeconds = 0;

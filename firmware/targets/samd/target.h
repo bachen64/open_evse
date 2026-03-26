@@ -19,8 +19,6 @@
 
 #define GetVerStr(s) strcpy(s,VERSION)
 
-#include "eeprom_emulation.h"
-
 void wdt_disable();
 
 #ifdef WATCHDOG
@@ -97,5 +95,35 @@ public:
 };
 
 void getMcuId(uint8_t *mcuid);
+
+#include "SparkFun_External_EEPROM.h"
+extern ExternalEEPROM g_eeprom;
+
+static uint8_t eeprom_read_byte (const uint8_t *ofs) {
+  uint8_t ret = 0xFF;
+  g_eeprom.read((uint32_t) ofs,(uint8_t *)&ret,sizeof(ret));
+  return ret;
+}
+static uint16_t eeprom_read_word (const uint16_t *ofs) {
+  uint16_t ret = 0xFFFF;
+  g_eeprom.read((uint32_t) ofs,(uint8_t *)&ret,sizeof(ret));
+  return ret;
+}
+static uint32_t eeprom_read_dword (const uint32_t *ofs) {
+  uint32_t ret = 0xFFFFFFFF;
+  g_eeprom.read((uint32_t) ofs,(uint8_t *)&ret,sizeof(ret));
+  return ret;
+}
+static void eeprom_write_byte (uint8_t *ofs, uint8_t val) {
+  g_eeprom.write((uint32_t)ofs, (const uint8_t *)&val, sizeof(val));
+}
+static void eeprom_write_word (uint16_t *ofs, uint16_t val) {
+  g_eeprom.write((uint32_t)ofs, (const uint8_t *)&val, sizeof(val));
+}
+static void eeprom_write_dword (uint32_t *ofs, uint32_t val) {
+  g_eeprom.write((uint32_t)ofs, (const uint8_t *)&val, sizeof(val));
+}
+
+
 
 void initTarget();

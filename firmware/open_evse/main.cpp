@@ -2449,9 +2449,11 @@ void setup()
   
   delay(400);  // give I2C devices time to be ready before running code that wants to initialize I2C devices.  Otherwise a hang can occur upon powerup.
   
-  Serial.begin(SERIAL_BAUD);
+  RAPI_SERIAL_PORT.begin(SERIAL_BAUD);
 
   initTarget();
+
+  g_EnergyMeter.Init();
 
 #ifdef BTN_MENU
   g_BtnHandler.init();
