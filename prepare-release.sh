@@ -1,18 +1,24 @@
 #!/bin/bash
 
-# Script to compile all released enviroments and copy build artifacts to project root for easy upload to github releases. 
+# Script to compile all released environments and copy build artifacts to firmware/targets/ for easy upload to github releases.
 
-pio run -e emonevse
-pio run -e openevse
-pio run -e emonevse_eu
-pio run -e emonevse_v6
+mkdir -p firmware/targets
 
-cp .pio/build/emonevse/firmware.hex emonevse.hex
-cp .pio/build/openevse/firmware.hex openevse.hex
-cp .pio/build/openevse_eu/firmware.hex openevse_eu.hex
-cp .pio/build/openevse_v6/firmware.hex openevse_v6cgmi.hex
-ls *.hex
+pio run -e m328p_v6
+cp .pio/build/m328p_v6/firmware.hex firmware/targets/m328p_openevse_v6_CGMI.hex
 
-echo "Done" 
+pio run -e m328p_v5
+cp .pio/build/m328p_v5/firmware.hex firmware/targets/m328p_openevse_v5.hex
 
+pio run -e m328p_v6_RTC_BTN_LCD
+cp .pio/build/m328p_v6_RTC_BTN_LCD/firmware.hex firmware/targets/m328p_openevse_v6_RTC_BTN_LCD.hex
 
+pio run -e m328p_v5_RTC_BTN_LCD
+cp .pio/build/m328p_v5_RTC_BTN_LCD/firmware.hex firmware/targets/m328p_openevse_v5_RTC_BTN_LCD.hex
+
+pio run -e samd
+cp .pio/build/samd_us/firmware.bin firmware/targets/arm_samd_openevse_nxt.bin
+
+ls firmware/targets/
+
+echo "Done"
