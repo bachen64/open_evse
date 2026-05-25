@@ -4,9 +4,6 @@ name: Build using PlatformIO
 on:
   workflow_call:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,10 +39,10 @@ jobs:
             artifact: firmware.bin
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Cache pip
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-${{ matrix.env }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -53,13 +50,13 @@ jobs:
           ${{ runner.os }}-${{ matrix.env }}-pip-
 
     - name: Cache PlatformIO
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.platformio
         key: ${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('**/lockfiles') }}
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '${{ matrix.python }}'
 
@@ -97,7 +94,7 @@ jobs:
         EOF
 
     - name: Upload output to GitHub
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.env }}
         path: |

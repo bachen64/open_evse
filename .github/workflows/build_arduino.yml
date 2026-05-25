@@ -4,9 +4,6 @@ name: Build using Arduino
 on:
   workflow_call:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,14 +27,14 @@ jobs:
 
     steps:
       - name: Cache Arduino
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.arduino15
           key: ${{ runner.os }}-${{ matrix.name }}-arduino-15-${{ hashFiles('**/packages.txt') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.name }}-arduino-15-
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v1
@@ -73,7 +70,7 @@ jobs:
           source ci/info_common.sh info.json
 
       - name: Upload output to GitHub
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.name }}
           path: |
