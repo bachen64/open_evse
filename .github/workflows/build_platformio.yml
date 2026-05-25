@@ -12,24 +12,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - env: openevse_1-8-3
+          - env: m328p_v5
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse_latest
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: m328p_v6
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: m328p_v5_RTC_BTN_LCD
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse_eu
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: m328p_v6_RTC_BTN_LCD
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse_v6
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: samd
             python: 3.x
-            platformio: 6.1.5 
-          - env: emonevse
-            python: 3.x
-            platformio: 6.1.5 
+            platformio: 6.1.5
+            arch: samd
+            artifact: firmware.bin
 
     steps:
     - uses: actions/checkout@v2
@@ -61,7 +68,8 @@ jobs:
     - name: Run PlatformIO
       run: pio run -e ${{ matrix.env }}
 
-    - name: Get compiler and output info
+    - name: Get compiler and output info (AVR)
+      if: matrix.arch == 'avr'
       run: |
         NAME=${{ matrix.env }}
         BUILT_TOOL="Platform IO"
@@ -72,10 +80,23 @@ jobs:
 
         source ci/info_common.sh info.json
 
+    - name: Get build info (SAMD)
+      if: matrix.arch == 'samd'
+      run: |
+        BIN_SIZE=$(ls -l .pio/build/${{ matrix.env }}/firmware.bin | awk '{ print $5 }')
+        cat <<EOF >info.json
+        {
+          "name": "${{ matrix.env }}",
+          "built_tool": "Platform IO",
+          "arch": "samd",
+          "bin_size": $BIN_SIZE
+        }
+        EOF
+
     - name: Upload output to GitHub
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.env }}
         path: |
-          .pio/build/${{ matrix.env }}/firmware.hex
+          .pio/build/${{ matrix.env }}/${{ matrix.artifact }}
           info.json

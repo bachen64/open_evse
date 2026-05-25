@@ -19,11 +19,13 @@ jobs:
 
     - name: Rename images to something more sensible
       run: |
-        find artifacts -name '*.hex' | while read -r image; do
-          dir=$(dirname "${image}")
-          board=$(basename "${dir}")
-          echo mv "$image" "$board.hex"
-          mv "$image" "$board.hex"
+        for ext in hex bin; do
+          find artifacts -name "*.$ext" | while read -r image; do
+            dir=$(dirname "${image}")
+            board=$(basename "${dir}")
+            echo mv "$image" "$board.$ext"
+            mv "$image" "$board.$ext"
+          done
         done
         jq -s . $(find -name info.json) > build_info.json
         jq -r '(map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv' build_info.json > build_info.csv
@@ -37,5 +39,6 @@ jobs:
         title: "Development Build"
         files: |
           *.hex
+          *.bin
           build_info.json
           build_info.csv

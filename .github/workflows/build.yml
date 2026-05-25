@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - master
+      - linco-work
   pull_request:
 
 jobs:
@@ -18,18 +18,17 @@ jobs:
 
   build_platform_io:
     name: Build using PlatformIO
-    uses: OpenEVSE/open_evse/.github/workflows/build_platformio.yml@master
+    uses: OpenEVSE/open_evse/.github/workflows/build_platformio.yml@linco-work
 
   build_arduino:
     name: Build using Arduino
-    uses: OpenEVSE/open_evse/.github/workflows/build_arduino.yml@master
+    uses: OpenEVSE/open_evse/.github/workflows/build_arduino.yml@linco-work
 
   release:
     name: Create pre-release
 
     needs:
       - build_platform_io
-      - build_arduino
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/linco-work'
 
-    uses: OpenEVSE/open_evse/.github/workflows/release.yml@master
+    uses: OpenEVSE/open_evse/.github/workflows/release.yml@linco-work
