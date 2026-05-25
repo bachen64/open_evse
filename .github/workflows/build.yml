@@ -20,10 +20,6 @@ jobs:
     name: Build using PlatformIO
     uses: OpenEVSE/open_evse/.github/workflows/build_platformio.yml@linco-work
 
-  build_arduino:
-    name: Build using Arduino
-    uses: OpenEVSE/open_evse/.github/workflows/build_arduino.yml@linco-work
-
   release:
     name: Create pre-release
 
