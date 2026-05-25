@@ -27,14 +27,14 @@ jobs:
 
     steps:
       - name: Cache Arduino
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.arduino15
           key: ${{ runner.os }}-${{ matrix.name }}-arduino-15-${{ hashFiles('**/packages.txt') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.name }}-arduino-15-
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v1
