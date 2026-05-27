@@ -206,9 +206,6 @@ class J1772EVSEController {
 #ifdef OVERCURRENT_THRESHOLD
   unsigned long m_OverCurrentStartMs;
 #endif // OVERCURRENT_THRESHOLD
-#ifdef OEV6
-  uint8_t m_isV6;
-#endif
 
 
   void setFlags(uint16_t flags) { 
@@ -234,7 +231,7 @@ class J1772EVSEController {
   }
 
 #ifdef OEV6
-  uint8_t isV6() { return m_isV6; }
+  uint8_t isV6() { return g_isV6; }
 #endif
 
 #ifdef ADVPWR
@@ -329,7 +326,7 @@ public:
   void SetHardFault() { setVFlags(ECVF_HARD_FAULT); }
   void ClrHardFault() { clrVFlags(ECVF_HARD_FAULT); }
   int8_t InHardFault() { return vFlagIsSet(ECVF_HARD_FAULT); }
-  int8_t CGMIisEnabled() { return flagIsSet(ECF_CGMI); }
+  int8_t hasCGMI() { return flagIsSet(ECF_CGMI); }
   int8_t BootLockIsEnabled() { return !flagIsSet(ECF_BOOT_LOCK_DISABLED); }
   void EnableBootLock(uint8_t tf) {
     if (!tf) setFlags(ECF_BOOT_LOCK_DISABLED); 

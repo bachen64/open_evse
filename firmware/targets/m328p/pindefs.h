@@ -3,10 +3,6 @@
 //#define PZEM_RX_PIN 9 // AUX_B = PB1
 //#define PZEM_TX_PIN A3 // AUX_A = PC3
 
-// V6 has PD7 tied to ground
-#define V6_ID_REG D
-#define V6_ID_IDX 7
-
 #define GFI_INTERRUPT 0 // interrupt number 0 = PD2, 1 = PD3
 // interrupt number 0 = PD2, 1 = PD3
 #define GFI_REG &PIND
@@ -38,22 +34,6 @@
 #define ACLINE2_REG &PIND
 #define ACLINE2_IDX 4
 
-#ifdef OEV6
-// digital Relay trigger pin
-#define CHARGING_REG &PIND
-#define CHARGING_IDX 5
-// digital Relay trigger pin for second relay
-//#define CHARGING2_REG &PIND
-//#define CHARGING2_IDX 6
-#else // !OEV6
-// digital Relay trigger pin
-#define CHARGING_REG &PINB
-#define CHARGING_IDX 0
-// digital Relay trigger pin for second relay - OE1 only
-//#define CHARGING2_REG &PIND
-//#define CHARGING2_IDX 7
-#endif // OEV6
-
 #ifdef VOLTMETER
 // N.B. Note, ADC2 is already used as PP_PIN so beware of potential clashes
 // voltmeter pin is ADC2 on OPENEVSE_2
@@ -82,6 +62,9 @@
 #define V6_CHARGING_PIN  5
 #define V6_CHARGING_PIN2 6
 
+// digital Relay trigger pin
+#define CHARGING_REG &PINB
+#define CHARGING_IDX 0
 // digital Relay trigger pin for second relay
 #define CHARGING2_REG &PIND
 #define CHARGING2_IDX 7

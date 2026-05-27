@@ -50,6 +50,15 @@
 //Language preferences: Add your custom languagefile here. See Language_default.h for more info.
 //#include "Language_norwegian.h"
 
+
+#ifdef OEV6
+// set by autodetection code in target.cpp initTarget()
+extern bool g_isV6;
+#endif // OEV6
+extern bool g_hasCGMI;
+
+
+
 //-- begin features
 
 #ifndef PLATFORMIO
@@ -57,13 +66,10 @@
 // support V6 hardware
 #define OEV6
 #ifdef OEV6
-//#define INVERT_V6_DETECTION // DO NOT USE: ONLY FOR lincomatic's BETA V6 board
 #define RELAY_PWM
 #define RELAY_HOLD_DELAY_TUNING // enable Z0
-#endif // OEV6
 
-// enable CGMI support
-//#define ENABLE_CGMI
+#endif // OEV6
 
 // auto detect L1/L2
 #ifndef NO_AUTOSVCLEVEL
@@ -1288,7 +1294,6 @@ extern TempMonitor g_TempMonitor;
 
 char *GetFirmwareVersion(char *str);
 void wdt_delay(uint32_t ms);
-
 
 #include "strings.h"
 #include "rapi_proc.h"

@@ -1,6 +1,5 @@
 #include "open_evse.h"
 
-
 // wdt_init turns off the watchdog timer after we use it
 // to reboot
 
@@ -125,5 +124,41 @@ uint16_t AdcPin::read()
 // platform-specific init
 void initTarget()
 {
+
+/* detect the board
+ * Board ID
+PD7 | ADC6 |
+  0 | 0 | OpenEVSE v1-v5
+  1 | 0 | OEV6 v5.5
+  0 | 1 | n/a
+  1 | 1 | OEV6 + CGMI v6.5+
+  *
+  N.B. lincomatic's BETA V6 board inverts PD7 so V6 is PD7=0
+ */
+  DigitalPin pinPD7;
+  pinPD7.init(&PIND,7,DigitalPin::INP);
+  int pd7 = pinPD7.read();
+
+  // ADC - fake as a digital pin
+  int adc6 = analogRead(A6);
+  if (adc6 > 512) adc6 = 1;
+  else adc6 = 0;
+
+  if (pd7 && !adc6) {
+    g_isV6 = true;
+    g_hasCGMI = false;
+  }
+  else if (pd7 && adc6) {
+    g_isV6 = true;
+    g_hasCGMI = true;
+  }
+  else {
+    g_isV6 = false;
+    g_hasCGMI = false;
+  }
+
+  extern char g_sTmp[];
+  sprintf(g_sTmp,"isV6: %c  hasCGMI %c",g_isV6 ? '1':'0',g_hasCGMI ? '1':'0');
+  Serial.println(g_sTmp);
 
 }

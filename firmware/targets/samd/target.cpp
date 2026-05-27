@@ -53,6 +53,8 @@ void DigitalPin::init(uint32_t pinnum,int idxjunk,PinMode mode)
 // platform-specific init
 void initTarget()
 {
+  g_hasCGMI = true;
+
   Wire.begin();
   g_eeprom.setMemoryType(512);
   if (g_eeprom.begin() == false) {

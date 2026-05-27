@@ -142,6 +142,14 @@ BtnHandler g_BtnHandler;
 
 //-- begin global variables
 
+
+#ifdef OEV6
+// set by autodetection code in target.cpp initTarget()
+bool g_isV6 = false;
+#endif // OEV6
+bool g_hasCGMI = false;
+
+
 char g_sTmp[TMP_BUF_SIZE];
 
 OnboardDisplay g_OBD;
@@ -661,7 +669,7 @@ void OnboardDisplay::Update(int8_t updmode)
 #ifdef LCD16X2 //Adafruit RGB LCD
       LcdSetBacklightColor(RED);
       if (updmode == OBD_UPD_HARDFAULT) {
-        LcdMsg_P(g_EvseController.CGMIisEnabled() ? g_psSvcReq : g_psEvseError,g_psNoGround);
+        LcdMsg_P(g_EvseController.hasCGMI() ? g_psSvcReq : g_psEvseError,g_psNoGround);
       }
       else {
 	// 2nd line will be updated below with auto retry count

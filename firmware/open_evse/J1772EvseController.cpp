@@ -490,7 +490,7 @@ uint8_t J1772EVSEController::EnableAutoSvcLevel(uint8_t tf)
 {
   int rc = 0;
   if (tf) {
-    if (CGMIisEnabled()) rc = 1;
+    if (hasCGMI()) rc = 1;
     else clrFlags(ECF_AUTO_SVC_LEVEL_DISABLED);
   }
   else {
@@ -693,7 +693,7 @@ uint8_t J1772EVSEController::doPost()
   WDT_RESET();
 
   uint8_t RelayOff;
-#ifndef OPENEVSE_2
+#if !defined(OPENEVSE_2) && defined(AUTOSVCLEVEL)
   uint8_t Relay1, Relay2; //Relay Power status
 #endif
   uint8_t svcState = UD;	// service state = undefined
@@ -896,8 +896,8 @@ uint8_t J1772EVSEController::doPost()
 #endif
     if (StuckRelayChkEnabled()) {
       RelayOff = ReadACPins();
-      if ((CGMIisEnabled() && !(RelayOff & RLY_TEST_PIN_OPEN)) ||
-          (!CGMIisEnabled() && (RelayOff != ACPINS_OPEN))) {
+      if ((hasCGMI() && !(RelayOff & RLY_TEST_PIN_OPEN)) ||
+          (!hasCGMI() && (RelayOff != ACPINS_OPEN))) {
 	svcState = SR;
 #ifdef LCD16X2
 	g_OBD.LcdMsg_P(g_psTestFailed,g_psStuckRelay);
@@ -948,18 +948,6 @@ uint8_t J1772EVSEController::doPost()
 
 void J1772EVSEController::Init()
 {
-#ifdef OEV6
-  DPIN_MODE_INPUT(V6_ID_REG,V6_ID_IDX);
-#ifdef INVERT_V6_DETECTION
-  if (DPIN_READ(V6_ID_REG,V6_ID_IDX)) m_isV6 = 0;
-  else m_isV6 = 1;
-#else
-  if (DPIN_READ(V6_ID_REG,V6_ID_IDX)) m_isV6 = 1;
-  else m_isV6 = 0;
-#endif
-  //  Serial.print("isV6: ");Serial.println(isV6());
-#endif
-
 #ifdef MENNEKES_LOCK
   m_MennekesLock.Init();
 #endif // MENNEKES_LOCK
@@ -1055,11 +1043,12 @@ void J1772EVSEController::Init()
   m_wFlags |= ECF_AUTO_SVC_LEVEL_DISABLED;
 #endif
 
-#ifdef ENABLE_CGMI
-  m_wFlags |= ECF_CGMI;
-#endif // ENABLE_CGMI
-
-  if (CGMIisEnabled() && !flagIsSet(ECF_AUTO_SVC_LEVEL_DISABLED)) {
+#ifdef OEV6
+  if (g_hasCGMI) {
+    m_wFlags |= ECF_CGMI;
+  }
+#endif
+  if (hasCGMI() && !flagIsSet(ECF_AUTO_SVC_LEVEL_DISABLED)) {
     // can't do auto svc level when CGMI enabled, revert to default
     setFlags(ECF_AUTO_SVC_LEVEL_DISABLED);
     svclvl = DEFAULT_SERVICE_LEVEL;
@@ -1372,7 +1361,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
 #ifdef ADVPWR
   uint8_t acpinstate = ReadACPins();
 
-  if (CGMIisEnabled() && GndChkEnabled() && (acpinstate & GND_TEST_PIN_OPEN)) {
+  if (hasCGMI() && GndChkEnabled() && (acpinstate & GND_TEST_PIN_OPEN)) {
     // bad ground
     tmpevsestate = EVSE_STATE_NO_GROUND;
     m_EvseState = EVSE_STATE_NO_GROUND;
@@ -1390,14 +1379,14 @@ void J1772EVSEController::Update(uint8_t forcetransition)
   
   if (nofault) {
     if (chargingIsOn()) { // relay closed
-      if (StuckRelayChkEnabled() && CGMIisEnabled() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY) && (acpinstate & RLY_TEST_PIN_OPEN)) {
+      if (StuckRelayChkEnabled() && hasCGMI() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY) && (acpinstate & RLY_TEST_PIN_OPEN)) {
         // relay didn't close
         chargingOff(); // open the relay
         tmpevsestate = EVSE_STATE_RELAY_CLOSURE_FAULT;
         m_EvseState = EVSE_STATE_RELAY_CLOSURE_FAULT;
         nofault = 0;
       }
-      else if (!CGMIisEnabled() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY)) {
+      else if (!hasCGMI() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY)) {
         // ground check - can only test when relay closed
         if (GndChkEnabled() && (acpinstate == ACPINS_OPEN)) {
           // bad ground
@@ -1428,7 +1417,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
       }
     }
     else { // !chargingIsOn() - relay open
-      if (!CGMIisEnabled() && (prevevsestate == EVSE_STATE_NO_GROUND)) {
+      if (!hasCGMI() && (prevevsestate == EVSE_STATE_NO_GROUND)) {
         // check to see if EV disconnected
         if (!EvConnected()) {
           // EV disconnected - cancel fault
@@ -1448,8 +1437,8 @@ void J1772EVSEController::Update(uint8_t forcetransition)
         }
       }
       else if (StuckRelayChkEnabled()) {    // stuck relay check - can test only when relay open
-        if ((CGMIisEnabled() && !(acpinstate & RLY_TEST_PIN_OPEN)) ||
-            (!CGMIisEnabled() && (acpinstate != ACPINS_OPEN))) { // Stuck Relay reading
+        if ((hasCGMI() && !(acpinstate & RLY_TEST_PIN_OPEN)) ||
+            (!hasCGMI() && (acpinstate != ACPINS_OPEN))) { // Stuck Relay reading
           if ((prevevsestate != EVSE_STATE_STUCK_RELAY) && !m_StuckRelayStartTimeMS) { //check for first occurence
             m_StuckRelayStartTimeMS = curms; // mark start state
           }
