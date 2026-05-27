@@ -1,5 +1,9 @@
 Change Log
 
+20260527 SCL
+- get rid of old V6 detection code (and INVERT_V6_DETECTION)
+  -> new globals g_isV6 and g_hasCGMI initialized in initTarget()
+
 20260219 SCL
 - added $FF L 0|1 command to enable/disable boot lock feature
   added ECF_BOOT_LOCK_DISABLED
