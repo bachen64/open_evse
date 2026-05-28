@@ -38,7 +38,8 @@
 //reserved #define EVSE_STATE_PILOT_ERROR 0x0C // pilot self test error
 //reserved #define EVSE_STATE_TEMP_SENSOR_FAULT 0x0D // temp sensor dead
 #define EVSE_STATE_RELAY_CLOSURE_FAULT 0x0E
-#define EVSE_STATE_EEPROM_FAILURE 0x0F // SAMD only
+#define EVSE_STATE_PP_SHORTED 0x0F // PP pin shorted
+#define EVSE_STATE_EEPROM_FAILURE 0x10 // SAMD only
 #define EVSE_FAULT_STATE_END EVSE_STATE_EEPROM_FAILURE
            
 #define EVSE_STATE_SLEEPING 0xfe // waiting for timer
@@ -616,6 +617,10 @@ int GetHearbeatTrigger();
     eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,0xff);
     eeprom_write_byte((uint8_t*)EOFS_STUCK_RELAY_TRIP_CNT,0xff);
   }
+#ifdef PP_AUTO_AMPACITY
+  void DoPPShorted();
+#endif // PP_AUTO_AMPACITY
+
 };
 
 #ifdef FT_ENDURANCE

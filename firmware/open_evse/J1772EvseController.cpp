@@ -367,6 +367,23 @@ void J1772EVSEController::chargingOff()
 #endif
 }
 
+#ifdef PP_AUTO_AMPACITY
+void J1772EVSEController::DoPPShorted()
+{
+  m_EvseState = EVSE_STATE_PP_SHORTED;
+  g_OBD.Update(OBD_UPD_FORCE);
+#ifdef RAPI
+  RapiSendEvseState();
+#endif
+  while (g_ACCController.ReadPPMaxAmps() == 0) {
+    ProcessInputs();
+    WDT_RESET();
+    delay(100);
+  }
+  m_EvseState = EVSE_STATE_UNKNOWN;
+}
+#endif // PP_AUTO_AMPACITY
+
 void J1772EVSEController::HardFault(int8_t recoverable)
 {
   SetHardFault();
@@ -1785,6 +1802,13 @@ if (TempChkEnabled()) {
       chargingOff(); // turn off charging current
       m_Pilot.SetState(PILOT_STATE_P12);
     }
+#ifdef PP_AUTO_AMPACITY
+    else if (m_EvseState == EVSE_STATE_PP_SHORTED) {
+      // Ground not detected
+      chargingOff(); // turn off charging current
+      m_Pilot.SetState(PILOT_STATE_P12);
+    }
+#endif // PP_AUTO_AMPACITY
     else if (m_EvseState == EVSE_STATE_STUCK_RELAY) {
       // Stuck relay detected
       chargingOff(); // turn off charging current

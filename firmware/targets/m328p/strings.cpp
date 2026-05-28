@@ -122,3 +122,8 @@ const char *g_DelayMenuItems[] = STR_YESNO_SETSTART_SETSTOP;
 #ifdef OVERCURRENT_THRESHOLD
 const char g_psOverCurrent[] PROGMEM = STR_OVER_CURRENT;
 #endif // OVERCURRENT_THRESHOLD
+
+#ifdef PP_AUTO_AMPACITY
+const char g_psCableFault[] PROGMEM = STR_CABLE_FAULT;
+const char g_psPPShorted[] PROGMEM = STR_PP_SHORTED;
+#endif //PP_AUTO_AMPACITY

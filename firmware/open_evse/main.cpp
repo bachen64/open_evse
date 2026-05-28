@@ -663,6 +663,17 @@ void OnboardDisplay::Update(int8_t updmode)
 #endif
       break;
 #endif // OVERCURRENT_THRESHOLD   
+#ifdef PP_AUTO_AMPACITY
+    case EVSE_STATE_PP_SHORTED:
+      SetGreenLed(0);
+      SetRedLed(1);
+#ifdef LCD16X2 //Adafruit RGB LCD
+      LcdSetBacklightColor(RED);
+      LcdPrint_P(0,g_psCableFault);
+      LcdPrint_P(1,g_psPPShorted);
+#endif
+      break;
+#endif // PP_AUTO_AMPACITY
     case EVSE_STATE_NO_GROUND:
       SetGreenLed(0);
       SetRedLed(1);
@@ -2418,7 +2429,9 @@ void EvseReset()
 #endif  // DELAYTIMER
 
 #ifdef PP_AUTO_AMPACITY
-  g_ACCController.AutoSetCurrentCapacity();
+  if (g_ACCController.AutoSetCurrentCapacity() == 1) {
+    g_EvseController.DoPPShorted();
+  }
 #endif
 }
 
@@ -2432,9 +2445,8 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
     // already debounces before requesting the state transition, so we can
     // be absolutely sure that the PP pin has firm contact by the time we
     // get here
-    if (g_ACCController.AutoSetCurrentCapacity()) {
-      // invalid PP so 0 amps - force to stay in State A
-      retEvseState = EVSE_STATE_A;
+    if (g_ACCController.AutoSetCurrentCapacity() == 1) {
+      retEvseState = EVSE_STATE_PP_SHORTED;
     }
   }
   /*  else { // EVSE_STATE_A

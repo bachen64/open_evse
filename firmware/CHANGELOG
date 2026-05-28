@@ -3,6 +3,13 @@ Change Log
 20260527 SCL
 - get rid of old V6 detection code (and INVERT_V6_DETECTION)
   -> new globals g_isV6 and g_hasCGMI initialized in initTarget()
+- PP
+  -> if no resistor present, disable auto ampacity
+  -> add EVSE_STATE_PP_SHORTED
+     -> if shorted PP detected on boot, spin until the cable is removed
+     -> if cable isn't present at boot, shorted PP will only be detected
+	on transition to STATE B/C
+     -> LCD: CABLE FAULT/PP SHORTED
 
 20260219 SCL
 - added $FF L 0|1 command to enable/disable boot lock feature

@@ -127,3 +127,8 @@ extern const char *g_DelayMenuItems[];
 #ifdef OVERCURRENT_THRESHOLD
 extern const char g_psOverCurrent[] PROGMEM;
 #endif // OVERCURRENT_THRESHOLD
+
+#ifdef PP_AUTO_AMPACITY
+extern const char g_psCableFault[] PROGMEM;
+extern const char g_psPPShorted[] PROGMEM;
+#endif //PP_AUTO_AMPACITY
