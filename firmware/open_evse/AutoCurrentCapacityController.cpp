@@ -16,6 +16,7 @@
 
 #ifdef PP_AUTO_AMPACITY
 
+#if (ADC_RESOLUTION_BITS == 10)
 static PP_AMPS s_ppAmps[] = {
   {0,0},
   {93,63},  // 100 = 93
@@ -24,6 +25,16 @@ static PP_AMPS s_ppAmps[] = {
   {615,13}, // 1.5K = 615
   {1023,0}
 };
+#elif (ADC_RESOLUTION_BITS == 12)
+static PP_AMPS s_ppAmps[] = {
+  {0,0},
+  {93*4,63},   // 100 = 93
+  {185*4,32},  // 220 = 185
+  {415*4,20},  // 680 = 415
+  {615*4,13},  // 1.5K = 615
+  {4095,0}
+};
+#endif
 
 AutoCurrentCapacityController::AutoCurrentCapacityController() :
   adcPP(PP_PIN)
