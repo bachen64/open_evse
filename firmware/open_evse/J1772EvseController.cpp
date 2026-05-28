@@ -2076,16 +2076,17 @@ int J1772EVSEController::SetCurrentCapacity(uint8_t amps,uint8_t updatelcd,uint8
   if (nosave) {
     // temporary amps can't be > max set in EEPROM
     maxcurrentcap = GetMaxCurrentCapacity();
-  }
 
 #ifdef PP_AUTO_AMPACITY
   if ((GetState() >= EVSE_STATE_B) && (GetState() <= EVSE_STATE_C)) {
     uint8_t mcc = g_ACCController.ReadPPMaxAmps();
-    if (mcc && (mcc < maxcurrentcap)) {
+    if (mcc && (mcc != PP_AMPS_ABSENT) && (mcc < maxcurrentcap)) {
       maxcurrentcap = mcc;
     }
   }
 #endif // PP_AUTO_AMPACITY
+  }
+
 
   if ((amps >= MIN_CURRENT_CAPACITY_J1772) && (amps <= maxcurrentcap)) {
     m_CurrentCapacity = amps;
