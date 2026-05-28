@@ -15,6 +15,9 @@
 
 #include "open_evse.h"
 
+// fake value denoting no resistor present
+#define PP_AMPS_ABSENT 0xFF
+
 typedef struct pp_amps {
   uint16_t adcVal;
   uint8_t amps;
