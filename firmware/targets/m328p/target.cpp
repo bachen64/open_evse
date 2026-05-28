@@ -128,10 +128,10 @@ void initTarget()
 /* detect the board
  * Board ID
 PD7 | ADC6 |
-  0 | 0 | OpenEVSE v1-v5
-  1 | 0 | OEV6 v5.5
-  0 | 1 | n/a
-  1 | 1 | OEV6 + CGMI v6.5+
+  0 | 0   | OpenEVSE v1-v5
+  1 | 0   | OEV6 v5.5
+  0 | 1   | n/a
+  1 | 1   | OEV6 + CGMI v6.5+  (ADC6 tied to VCC via 330 ohm -> reads ~1023; floating = no CGMI)
   *
   N.B. lincomatic's BETA V6 board inverts PD7 so V6 is PD7=0
  */
@@ -140,8 +140,9 @@ PD7 | ADC6 |
   int pd7 = pinPD7.read();
 
   // ADC - fake as a digital pin
+  // CGMI boards tie A6 to VCC via 330 ohm -> reads ~1023; floating reads mid-rail or lower
   int adc6 = analogRead(A6);
-  if (adc6 > 512) adc6 = 1;
+  if (adc6 > 1000) adc6 = 1;
   else adc6 = 0;
 
   if (pd7 && !adc6) {

@@ -302,10 +302,6 @@ void J1772EVSEController::chargingOn()
   }
   else {
 #endif // OEV6
-
-#ifdef CHARGINGAC_REG
-    pinChargingAC.write(1);
-#endif
 #ifdef CHARGING_REG
     pinCharging.write(1);
 #endif
@@ -315,6 +311,9 @@ void J1772EVSEController::chargingOn()
 #ifdef OEV6
   }
 #endif // OEV6
+#ifdef CHARGINGAC_REG
+  pinChargingAC.write(1);
+#endif
 
   setVFlags(ECVF_CHARGING_ON);
   
