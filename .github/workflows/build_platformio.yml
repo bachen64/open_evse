@@ -12,22 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - env: m328p_v5
+          - env: m328p_autodetect
             python: 3.x
             platformio: 6.1.5
             arch: avr
             artifact: firmware.hex
-          - env: m328p_v6
-            python: 3.x
-            platformio: 6.1.5
-            arch: avr
-            artifact: firmware.hex
-          - env: m328p_v5_RTC_BTN_LCD
-            python: 3.x
-            platformio: 6.1.5
-            arch: avr
-            artifact: firmware.hex
-          - env: m328p_v6_RTC_BTN_LCD
+          - env: m328p_RTC_BTN_LCD
             python: 3.x
             platformio: 6.1.5
             arch: avr
