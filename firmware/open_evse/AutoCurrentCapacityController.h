@@ -26,12 +26,15 @@ typedef struct pp_amps {
 class AutoCurrentCapacityController {
   AdcPin adcPP;
   uint8_t ppMaxAmps;
+  bool enabled;
 
 public:
   AutoCurrentCapacityController();
   uint8_t GetPPMaxAmps() { return ppMaxAmps; }
   uint8_t ReadPPMaxAmps();
   uint8_t AutoSetCurrentCapacity();
+  bool IsEnabled() { return enabled; }
+  void Enable(bool tf) { enabled = tf; }
 };
 
 

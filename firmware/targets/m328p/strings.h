@@ -131,4 +131,5 @@ extern const char g_psOverCurrent[] PROGMEM;
 #ifdef PP_AUTO_AMPACITY
 extern const char g_psCableFault[] PROGMEM;
 extern const char g_psPPShorted[] PROGMEM;
+extern const char g_psPPMissing[] PROGMEM;
 #endif //PP_AUTO_AMPACITY

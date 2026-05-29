@@ -126,4 +126,5 @@ const char g_psOverCurrent[] PROGMEM = STR_OVER_CURRENT;
 #ifdef PP_AUTO_AMPACITY
 const char g_psCableFault[] PROGMEM = STR_CABLE_FAULT;
 const char g_psPPShorted[] PROGMEM = STR_PP_SHORTED;
+const char g_psPPMissing[] PROGMEM = STR_PP_MISSING;
 #endif //PP_AUTO_AMPACITY

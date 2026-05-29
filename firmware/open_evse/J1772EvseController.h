@@ -39,7 +39,8 @@
 //reserved #define EVSE_STATE_TEMP_SENSOR_FAULT 0x0D // temp sensor dead
 #define EVSE_STATE_RELAY_CLOSURE_FAULT 0x0E
 #define EVSE_STATE_PP_SHORTED 0x0F // PP pin shorted
-#define EVSE_STATE_EEPROM_FAILURE 0x10 // SAMD only
+#define EVSE_STATE_PP_MISSING 0x10 // PP resistor missing
+#define EVSE_STATE_EEPROM_FAILURE 0x11 // SAMD only
 #define EVSE_FAULT_STATE_END EVSE_STATE_EEPROM_FAILURE
            
 #define EVSE_STATE_SLEEPING 0xfe // waiting for timer
@@ -340,12 +341,15 @@ public:
     else clrFlags(ECF_OVERCURRENT_DISABLED);
     SaveEvseFlags();
   }
+  #ifdef PP_AUTO_AMPACITY
   int8_t PPAutoAmpacityIsEnabled() { return flagIsSet(ECF_PP_AUTO_AMPACITY); }
   void EnablePPAutoAmpacity(uint8_t tf) {
     if (tf) setFlags(ECF_PP_AUTO_AMPACITY); 
     else clrFlags(ECF_PP_AUTO_AMPACITY);
     SaveEvseFlags();
+    g_ACCController.Enable(tf);
   }
+  #endif // PP_AUTO_AMPACITY
   unsigned long GetResetMs();
 
   uint8_t SetMaxHwCurrentCapacity(uint8_t amps);
@@ -624,7 +628,7 @@ int GetHearbeatTrigger();
     eeprom_write_byte((uint8_t*)EOFS_STUCK_RELAY_TRIP_CNT,0xff);
   }
 #ifdef PP_AUTO_AMPACITY
-  void DoPPShorted();
+  void DoPPError(bool shorted);
 #endif // PP_AUTO_AMPACITY
 
 };

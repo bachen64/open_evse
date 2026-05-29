@@ -367,18 +367,26 @@ void J1772EVSEController::chargingOff()
 }
 
 #ifdef PP_AUTO_AMPACITY
-void J1772EVSEController::DoPPShorted()
+void J1772EVSEController::DoPPError(bool shorted)
 {
-  m_EvseState = EVSE_STATE_PP_SHORTED;
+  if (shorted) {
+    m_EvseState = EVSE_STATE_PP_SHORTED;
+  }
+  else {
+    m_EvseState = EVSE_STATE_PP_MISSING;
+  }
   g_OBD.Update(OBD_UPD_FORCE);
 #ifdef RAPI
   RapiSendEvseState();
 #endif
-  while (g_ACCController.ReadPPMaxAmps() == 0) {
+  int ppmaxamps;
+   do {
+    ppmaxamps = g_ACCController.ReadPPMaxAmps();
     ProcessInputs();
     WDT_RESET();
     delay(100);
-  }
+   } while ((shorted && !ppmaxamps) || // shorted
+            (!shorted && (ppmaxamps < PP_AMPS_ABSENT))); // missing
   m_EvseState = EVSE_STATE_UNKNOWN;
 }
 #endif // PP_AUTO_AMPACITY
@@ -1802,8 +1810,8 @@ if (TempChkEnabled()) {
       m_Pilot.SetState(PILOT_STATE_P12);
     }
 #ifdef PP_AUTO_AMPACITY
-    else if (m_EvseState == EVSE_STATE_PP_SHORTED) {
-      // Ground not detected
+    else if ((m_EvseState == EVSE_STATE_PP_SHORTED) || (m_EvseState == EVSE_STATE_PP_MISSING)) {
+      // PP pin shorted
       chargingOff(); // turn off charging current
       m_Pilot.SetState(PILOT_STATE_P12);
     }

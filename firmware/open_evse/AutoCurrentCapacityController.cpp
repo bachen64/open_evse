@@ -37,12 +37,14 @@ static PP_AMPS s_ppAmps[] = {
 #endif
 
 AutoCurrentCapacityController::AutoCurrentCapacityController() :
-  adcPP(PP_PIN)
+  adcPP(PP_PIN),enabled(false)
 {
 }
 
 uint8_t AutoCurrentCapacityController::ReadPPMaxAmps()
 {
+  if (!enabled) return PP_AMPS_ABSENT;
+
   // n.b. should probably sample a few times and average it
   uint16_t adcval = adcPP.read();
 
@@ -63,11 +65,13 @@ uint8_t AutoCurrentCapacityController::ReadPPMaxAmps()
 
 uint8_t AutoCurrentCapacityController::AutoSetCurrentCapacity()
 {
+  if (!enabled) return 0;
+
   uint8_t amps = ReadPPMaxAmps();
 
   if (amps == PP_AMPS_ABSENT) {
     // open circuit - no cable present, charge at configured capacity
-    return 0;
+    return PP_AMPS_ABSENT;
   }
   else if (amps) {
     if (g_EvseController.GetCurrentCapacity() > ppMaxAmps) {

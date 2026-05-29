@@ -673,6 +673,15 @@ void OnboardDisplay::Update(int8_t updmode)
       LcdPrint_P(1,g_psPPShorted);
 #endif
       break;
+    case EVSE_STATE_PP_MISSING:
+      SetGreenLed(0);
+      SetRedLed(1);
+#ifdef LCD16X2 //Adafruit RGB LCD
+      LcdSetBacklightColor(RED);
+      LcdPrint_P(0,g_psCableFault);
+      LcdPrint_P(1,g_psPPMissing);
+#endif
+      break;
 #endif // PP_AUTO_AMPACITY
     case EVSE_STATE_NO_GROUND:
       SetGreenLed(0);
@@ -2429,8 +2438,10 @@ void EvseReset()
 #endif  // DELAYTIMER
 
 #ifdef PP_AUTO_AMPACITY
+  g_ACCController.Enable(g_EvseController.PPAutoAmpacityIsEnabled());
+  Serial.println(g_ACCController.IsEnabled());
   if (g_ACCController.AutoSetCurrentCapacity() == 1) {
-    g_EvseController.DoPPShorted();
+    g_EvseController.DoPPError(true); // shorted
   }
 #endif
 }
@@ -2445,8 +2456,12 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
     // already debounces before requesting the state transition, so we can
     // be absolutely sure that the PP pin has firm contact by the time we
     // get here
-    if (g_ACCController.AutoSetCurrentCapacity() == 1) {
+    uint8_t ascret = g_ACCController.AutoSetCurrentCapacity();
+    if (ascret == 1) {
       retEvseState = EVSE_STATE_PP_SHORTED;
+    }
+    else if (ascret == PP_AMPS_ABSENT) {
+      retEvseState = EVSE_STATE_PP_MISSING;
     }
   }
   /*  else { // EVSE_STATE_A
