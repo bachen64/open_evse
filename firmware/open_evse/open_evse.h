@@ -62,6 +62,10 @@ extern bool g_hasCGMI;
 //-- begin features
 
 #ifndef PLATFORMIO
+//
+// n.b. the items in this block are active only when building w/ Arduino IDE
+// when using PlatformIO, all features must be configured via platformio.ini
+//
 //#define OCPP
 // support V6 hardware
 #define OEV6
