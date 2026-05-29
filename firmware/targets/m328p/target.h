@@ -219,6 +219,7 @@ class AdcPin {
 public:
   enum PinMode { INP,INP_PU,OUT };
 
+  AdcPin() {}
   AdcPin(uint8_t _adcNum) {
     init(_adcNum);
   }

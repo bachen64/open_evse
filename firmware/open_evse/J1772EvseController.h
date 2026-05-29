@@ -79,7 +79,7 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 #define ECF_GND_CHK_DISABLED   0x0008 // no chk for ground fault
 #define ECF_STUCK_RELAY_CHK_DISABLED 0x0010 // no chk for stuck relay
 #define ECF_AUTO_SVC_LEVEL_DISABLED  0x0020 // auto detect svc level - requires ADVPWR
-//obsolete #define ECF_AUTO_START_DISABLED 0x0040  // no auto start charging
+#define ECF_PP_AUTO_AMPACITY 0x0040  // PP autoampacity enabled
 #define ECF_SERIAL_DBG         0x0080 // enable debugging messages via serial
 #define ECF_MONO_LCD           0x0100 // monochrome LCD backlight
 #define ECF_GFI_TEST_DISABLED  0x0200 // no GFI self test
@@ -338,6 +338,12 @@ public:
   void EnableOverCurrentCheck(uint8_t tf) {
     if (!tf) setFlags(ECF_OVERCURRENT_DISABLED); 
     else clrFlags(ECF_OVERCURRENT_DISABLED);
+    SaveEvseFlags();
+  }
+  int8_t PPAutoAmpacityIsEnabled() { return flagIsSet(ECF_PP_AUTO_AMPACITY); }
+  void EnablePPAutoAmpacity(uint8_t tf) {
+    if (tf) setFlags(ECF_PP_AUTO_AMPACITY); 
+    else clrFlags(ECF_PP_AUTO_AMPACITY);
     SaveEvseFlags();
   }
   unsigned long GetResetMs();

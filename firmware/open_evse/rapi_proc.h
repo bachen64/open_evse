@@ -147,6 +147,7 @@ FF - enable/disable feature
   G = Ground check
   L = boot Lock
   O = overcurrent check
+  P = PP auto ampacity
   R = stuck Relay check
   T = temperature monitoring
   V = Vent required check

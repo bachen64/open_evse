@@ -339,6 +339,11 @@ int EvseRapiProcessor::processCmd()
 	    g_EvseController.EnableOverCurrentCheck(u1.u8);
 	    break;
 #endif // OVERCURRENT_THRESHOLD
+#ifdef PP_AUTO_AMPACITY
+	  case 'P': // PP auto ampacity 
+	    g_EvseController.EnablePPAutoAmpacity(u1.u8);
+	    break;
+#endif // PP_AUTO_AMPACITY
 #ifdef TEMPERATURE_MONITORING
 	  case 'T': // temperature monitoring
 	    g_EvseController.EnableTempChk(u1.u8);
