@@ -141,15 +141,21 @@ PD7 | ADC6 |
 
   // ADC - fake as a digital pin
   // CGMI boards tie A6 to VCC via 330 ohm -> reads ~1023; floating reads mid-rail or lower
-  int adc6 = analogRead(A6);
-  if (adc6 > 1000) adc6 = 1;
-  else adc6 = 0;
 
-  if (pd7 && !adc6) {
+  // loop and sample ADC6 a few times to get the statisical mode, since it's floating
+  int adc6Count[2] = {0,0};
+  for (int i = 0; i < 5; i++) {
+    int adc6 = analogRead(A6);
+    adc6Count[adc6 > 1000 ? 1 : 0]++;
+    delay(10);
+  }
+  int adc6Mode = (adc6Count[1] > adc6Count[0]) ? 1 : 0;
+
+  if (pd7 && !adc6Mode) {
     g_isV6 = true;
     g_hasCGMI = false;
   }
-  else if (pd7 && adc6) {
+  else if (pd7 && adc6Mode) {
     g_isV6 = true;
     g_hasCGMI = true;
   }
@@ -158,8 +164,11 @@ PD7 | ADC6 |
     g_hasCGMI = false;
   }
 
+  /*
   extern char g_sTmp[];
+  sprintf(g_sTmp,"pd7: %c  adc6Mode: %c",pd7 ? '1':'0',adc6Mode ? '1':'0');
+  Serial.println(g_sTmp);
   sprintf(g_sTmp,"isV6: %c  hasCGMI %c",g_isV6 ? '1':'0',g_hasCGMI ? '1':'0');
   Serial.println(g_sTmp);
-
+  */
 }
