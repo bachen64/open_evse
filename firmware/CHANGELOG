@@ -1,6 +1,16 @@
 Change Log
 
-20260527 SCL
+
+20260528-29 SCL vD9.0.1
+- m328p: since A6 is floating in v1-5, read it 5x and use its statistical mode
+	when detecting board type
+- added ECF_PP_AUTO_AMPACITY - when set, PP ampacity detection is enabled
+  -> added RAPI command $FF P 0|1 to enable disable PP detection
+- added EVSE_STATE_PP_MISSING - cable is missing PP resistor
+     -> detected only on transition to state B/C
+     -> LCD: CABLE FAULT/PP SHORTED
+
+20260527 SCL vD9.0.0
 - get rid of old V6 detection code (and INVERT_V6_DETECTION)
   -> new globals g_isV6 and g_hasCGMI initialized in initTarget()
 - PP
