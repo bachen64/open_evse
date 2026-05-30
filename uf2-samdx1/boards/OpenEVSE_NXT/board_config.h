@@ -7,8 +7,8 @@
 #define INDEX_URL "https://www.openevse.com"
 #define BOARD_ID "SAMD21G18A-OpenEVSE-NXT"
 
-#define USB_VID 0x1B4F
-#define USB_PID 0x0D22
+#define USB_VID 0x04D8
+#define USB_PID 0xE437
 
 #define LED_PIN PIN_PA17
 
