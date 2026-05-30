@@ -98,6 +98,7 @@ jobs:
       uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.env }}
+        if-no-files-found: warn
         path: |
           .pio/build/${{ matrix.env }}/firmware.bin
           .pio/build/${{ matrix.env }}/firmware.uf2

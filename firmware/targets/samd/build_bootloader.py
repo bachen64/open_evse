@@ -217,6 +217,7 @@ def build_bootloader(source, target, env):
 def convert_firmware_to_uf2(source, target, env):
     build_dir = Path(env.subst("$BUILD_DIR"))
     prog_name = env.subst("$PROGNAME")
+    elf_path = build_dir / f"{prog_name}.elf"
     bin_path = build_dir / f"{prog_name}.bin"
     uf2_path = build_dir / f"{prog_name}.uf2"
 
@@ -226,6 +227,16 @@ def convert_firmware_to_uf2(source, target, env):
     if not uf2conv.exists():
         print(f"WARNING: uf2conv.py not found at {uf2conv}, skipping UF2 conversion")
         return
+
+    # The .bin is produced by the platform as a side-effect of the .elf build and
+    # may not exist yet when this post-action fires.  Generate it ourselves if needed.
+    if not bin_path.exists():
+        objcopy = Path(env.subst("$CC")).parent / "arm-none-eabi-objcopy"
+        try:
+            _run([str(objcopy), "-O", "binary", str(elf_path), str(bin_path)])
+        except RuntimeError:
+            print("WARNING: objcopy failed, cannot produce .bin or .uf2")
+            return
 
     print(f"\n--- Converting firmware to UF2 ---")
     try:
@@ -246,4 +257,6 @@ def convert_firmware_to_uf2(source, target, env):
 
 
 env.AddPreAction("$BUILD_DIR/${PROGNAME}.elf", build_bootloader)
-env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", convert_firmware_to_uf2)
+# Hook into the ELF (a real SCons target), not the .bin (a side-effect artifact
+# that SCons does not track and therefore never triggers AddPostAction).
+env.AddPostAction("$BUILD_DIR/${PROGNAME}.elf", convert_firmware_to_uf2)
