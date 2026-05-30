@@ -12,12 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - env: m328p_autodetect
+          - env: m328p_TFT_WIFI
             python: 3.x
             platformio: 6.1.5
             arch: avr
             artifact: firmware.hex
-          - env: m328p_RTC_BTN_LCD
+          - env: m328p_noWiFi_RTC_BTN_LCD
             python: 3.x
             platformio: 6.1.5
             arch: avr
@@ -26,7 +26,6 @@ jobs:
             python: 3.x
             platformio: 6.1.5
             arch: samd
-            artifact: firmware.bin
 
     steps:
     - uses: actions/checkout@v5
@@ -74,19 +73,33 @@ jobs:
       if: matrix.arch == 'samd'
       run: |
         BIN_SIZE=$(ls -l .pio/build/${{ matrix.env }}/firmware.bin | awk '{ print $5 }')
+        UF2_SIZE=$(ls -l .pio/build/${{ matrix.env }}/firmware.uf2 | awk '{ print $5 }')
         cat <<EOF >info.json
         {
           "name": "${{ matrix.env }}",
           "built_tool": "Platform IO",
           "arch": "samd",
-          "bin_size": $BIN_SIZE
+          "bin_size": $BIN_SIZE,
+          "uf2_size": $UF2_SIZE
         }
         EOF
 
-    - name: Upload output to GitHub
+    - name: Upload output to GitHub (AVR)
+      if: matrix.arch == 'avr'
       uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.env }}
         path: |
           .pio/build/${{ matrix.env }}/${{ matrix.artifact }}
+          info.json
+
+    - name: Upload output to GitHub (SAMD)
+      if: matrix.arch == 'samd'
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ matrix.env }}
+        path: |
+          .pio/build/${{ matrix.env }}/firmware.bin
+          .pio/build/${{ matrix.env }}/firmware.uf2
+          .pio/build/${{ matrix.env }}/bootloader-*.bin
           info.json

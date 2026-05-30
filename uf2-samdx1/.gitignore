@@ -1,0 +1,38 @@
+build/
+.vs/
+uf2-bootloader.elf
+tmp
+*.sw?
+Makefile.user
+node_modules
+scripts/clean-ifaces/*.plist
+.vscode/c_cpp_properties.json
+TAGS
+dist
+
+# CMSIS — only CMSIS/Include/ is needed for compilation
+lib/cmsis/CMSIS/Lib/
+lib/cmsis/CMSIS/Documentation/
+lib/cmsis/CMSIS/DSP_Lib/
+lib/cmsis/CMSIS/Pack/
+lib/cmsis/CMSIS/RTOS/
+lib/cmsis/CMSIS/SVD/
+lib/cmsis/CMSIS/Utilities/
+lib/cmsis/CMSIS/UserCodeTemplates/
+lib/cmsis/CMSIS_RTX/
+lib/cmsis/Device/
+
+# Unused chip-family libraries (OpenEVSE NXT is SAMD21 only)
+lib/samd51/
+lib/same51/
+lib/same54/
+
+# samd21 — only samd21a/include/ is used
+lib/samd21/samd21a/gcc/
+lib/samd21/samd21a/license/
+lib/samd21/samd21b/
+lib/samd21/samd21c/
+lib/samd21/samd21d/
+lib/samd21/samd21e/
+lib/samd21/samd21g/
+lib/samd21/samd21j/
