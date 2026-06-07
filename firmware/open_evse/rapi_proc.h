@@ -151,6 +151,7 @@ FF - enable/disable feature
   R = stuck Relay check
   T = temperature monitoring
   V = Vent required check
+  Z = zero-cross detection for relay switching
  $FF D 0 - disable diode check
  $FF G 1 - enable ground check
 
@@ -364,10 +365,19 @@ T0 amps - set fake charging current
  
 GY - Get Hearbeat Supervision Status
  Response includes heartbeatinterval hearbeatcurrentlimit hearbeattrigger
- hearbeattrigger: 0 - There has never been a missed pulse, 
+ hearbeattrigger: 0 - There has never been a missed pulse,
  2 - there is a missed pulse, and HS is still in current limit
- 1 - There was a missed pulse once, but it has since been acknkoledged. Ampacity has been successfully restored to max permitted 
+ 1 - There was a missed pulse once, but it has since been acknkoledged. Ampacity has been successfully restored to max permitted
  See SY above for worked expamples.
+
+GZ - get AC line frequency (requires RELAY_ZC_SWITCH)
+ response: $OK freqx100
+ freqx100(decimal): measured AC frequency * 100, e.g. 6012 = 60.12 Hz
+ 0 = frequency not yet measured (no relay operation has occurred since boot)
+ CGMI hardware: updated on relay close (zcWaitRelayClose) and open (zcWaitRelayOpen)
+ non-CGMI hardware: updated on relay open only (zcWaitRelayOpen); AC pins are
+   load-side on older non-V6 boards so no valid signal is available at relay close
+ $GZ^38
 
 Z0 FOR TESTING RELAY_AUTO_PWM_PIN ONLY
 Z0 closems holdpwm

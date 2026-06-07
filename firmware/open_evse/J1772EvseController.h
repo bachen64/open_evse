@@ -89,6 +89,7 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 #define ECF_BOOT_LOCK_DISABLED 0x2000 // boot lock
 #define ECF_OVERCURRENT_DISABLED 0x0400 // disable overcurrent check
 #define ECF_BUTTON_DISABLED    0x8000 // front panel button disabled
+#define ECF_RELAY_ZC_DISABLED  0x0800 // disable zero-crossing relay switching
 #define ECF_DEFAULT            0x0000
 
 // J1772EVSEController volatile m_wVFlags bits - not saved to EEPROM
@@ -149,6 +150,9 @@ class J1772EVSEController {
 #ifdef VOLTMETER_PIN
   AdcPin adcVoltMeter;
 #endif
+#if defined(RELAY_ZC_SWITCH) && defined(TARGET_SAMD)
+  AdcPin adcGmi;  // GMI_LINE (PA09) analog signal for voltage ZC detection
+#endif
 
 #ifdef CHARGING_REG
   DigitalPin pinCharging;
@@ -182,6 +186,9 @@ class J1772EVSEController {
   uint8_t m_relayCloseMs; // #ms for DC pulse to close relay
   uint8_t m_relayHoldPwm; // PWM duty cycle to hold relay closed
 #endif // RELAY_PWM
+#ifdef RELAY_ZC_SWITCH
+  uint16_t m_AcFreqX100; // measured AC frequency × 100 (e.g. 6012 = 60.12 Hz); 0 = not yet measured
+#endif
   uint16_t m_wFlags; // ECF_xxx
   uint16_t m_wVFlags; // ECVF_xxx
   static THRESH_DATA m_ThreshData;
@@ -253,7 +260,14 @@ class J1772EVSEController {
   uint8_t doPost();
 #endif // ADVPWR
   void chargingOn();
-  void chargingOff();
+  void chargingOff(uint8_t emergency = 0);
+#ifdef RELAY_ZC_SWITCH
+  void zcWaitRelay(uint8_t advanceMs);
+  void zcWaitRelayClose();
+  void zcWaitRelayOpen();
+  void waitCurrentZero();
+  uint32_t measureAcFreq(unsigned long *zcTimeMsOut);
+#endif
   uint8_t chargingIsOn() { return vFlagIsSet(ECVF_CHARGING_ON); }
 
 #ifdef TIME_LIMIT
@@ -329,6 +343,15 @@ public:
   void ClrHardFault() { clrVFlags(ECVF_HARD_FAULT); }
   int8_t InHardFault() { return vFlagIsSet(ECVF_HARD_FAULT); }
   int8_t hasCGMI() { return flagIsSet(ECF_CGMI); }
+#ifdef RELAY_ZC_SWITCH
+  uint8_t RelayZCSwitchEnabled() { return !flagIsSet(ECF_RELAY_ZC_DISABLED); }
+  void EnableRelayZCSwitch(uint8_t tf) {
+    if (!tf) setFlags(ECF_RELAY_ZC_DISABLED);
+    else clrFlags(ECF_RELAY_ZC_DISABLED);
+    SaveEvseFlags();
+  }
+  uint16_t GetAcFreqX100() { return m_AcFreqX100; }
+#endif // RELAY_ZC_SWITCH
   int8_t BootLockIsEnabled() { return !flagIsSet(ECF_BOOT_LOCK_DISABLED); }
   void EnableBootLock(uint8_t tf) {
     if (!tf) setFlags(ECF_BOOT_LOCK_DISABLED); 

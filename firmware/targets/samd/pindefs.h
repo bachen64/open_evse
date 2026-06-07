@@ -27,6 +27,10 @@
 
 
 
+#ifdef RELAY_ZC_SWITCH
+#define GMI_ADC_PIN ZERO_PA09  // GMI_LINE — ADC-capable, for voltage ZC detection
+#endif
+
 // dummies - unused
 #define PILOT_IDX 0
 #define CHARGING_IDX 0

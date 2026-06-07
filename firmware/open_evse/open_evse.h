@@ -342,6 +342,14 @@ extern AutoCurrentCapacityController g_ACCController;
 // PWM parameters written to/loaded from EEPROM
 #define RELAY_HOLD_DELAY_TUNING // enable Z0
 
+#ifdef RELAY_ZC_SWITCH
+#define RELAY_CLOSE_ADVANCE_MS     20  // ms before voltage ZC to energize relay coil
+#define RELAY_OPEN_ADVANCE_MS       2  // ms before voltage ZC to de-energize relay coil
+#define ZC_DETECT_TIMEOUT_MS       35  // > one full AC cycle (50 Hz = 20 ms)
+#define AC_ZC_HALF_PERIOD_MS        8  // conservative half-period (works 50 & 60 Hz)
+#define CURRENT_ZERO_THRESHOLD_MA 100  // mA; current below this = safe to open relay (0.1 A)
+#endif // RELAY_ZC_SWITCH
+
 // OEV6 w/ CGMI - when power is loss, temporarily triggers NO GROUND fault
 // delay recording of NO GROUND fault to avoid recording this spurious fault
 #ifndef NO_GND_RECORD_DELAY

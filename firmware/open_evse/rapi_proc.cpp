@@ -352,6 +352,11 @@ int EvseRapiProcessor::processCmd()
 	  case 'V': // vent required check
 	    g_EvseController.EnableVentReq(u1.u8);
 	    break;
+#ifdef RELAY_ZC_SWITCH
+	  case 'Z': // zero-crossing relay switch
+	    g_EvseController.EnableRelayZCSwitch(u1.u8);
+	    break;
+#endif // RELAY_ZC_SWITCH
 	  default: // unknown
 	    rc = -1;
 	  }
@@ -843,11 +848,18 @@ int EvseRapiProcessor::processCmd()
 #ifdef HEARTBEAT_SUPERVISION
     case 'Y': // HEARTBEAT SUPERVISION
 	  sprintf(buffer,"%d %d %d", g_EvseController.GetHearbeatInterval(), g_EvseController.GetHearbeatCurrent(), g_EvseController.GetHearbeatTrigger());
-      bufCnt = 1; 
+      bufCnt = 1;
 	  rc = 0;
       break;
 #endif //HEARTBEAT_SUPERVISION
-	   
+#ifdef RELAY_ZC_SWITCH
+    case 'Z': // get AC frequency
+      sprintf(buffer,"%u", g_EvseController.GetAcFreqX100());
+      bufCnt = 1;
+      rc = 0;
+      break;
+#endif // RELAY_ZC_SWITCH
+
     }
     break;
 

@@ -114,6 +114,136 @@ void J1772EVSEController::readAmmeter()
   WDT_RESET();
 }
 
+#ifdef RELAY_ZC_SWITCH
+// Block until AC current amplitude drops below CURRENT_ZERO_THRESHOLD_MA (0.1 A).
+// Polls readAmmeter() indefinitely. WDT_RESET() called each iteration.
+// Emergency opens (chargingOff(1)) bypass this entirely.
+void J1772EVSEController::waitCurrentZero()
+{
+  do {
+    WDT_RESET();
+    readAmmeter();
+    int32_t ma = (int32_t)m_AmmeterReading * m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+    if (ma < (int32_t)CURRENT_ZERO_THRESHOLD_MA) return;
+  } while (1);
+}
+
+// Measure AC frequency.  Stores the result (×100) in m_AcFreqX100 and sets
+// *zcTimeMsOut to the millis() timestamp of the second detected crossing.
+// Returns the half-period in µs, or 0 (with *zcTimeMsOut = 0) on failure.
+//
+// Detection method depends on hardware:
+//   SAMD:        ADC sign-change on GMI_LINE (adcGmi, PA09).
+//   m328p CGMI:  digital off-period pulses on pinAC2 — HIGH = near voltage ZC.
+//   m328p non-CGMI: each AC channel drives one diode half-wave (pinAC1 and
+//                pinAC2).  Rising edges alternate between channels every
+//                half-period; threshold offset cancels because both diodes
+//                have the same forward drop.
+uint32_t J1772EVSEController::measureAcFreq(unsigned long *zcTimeMsOut)
+{
+  *zcTimeMsOut = 0;
+  uint32_t zcUs[2] = {0, 0};
+  uint8_t count = 0;
+
+#if defined(TARGET_SAMD)
+  // ADC sign-change detection on GMI_LINE
+  uint8_t isFirst = 1;
+  uint16_t lastSample = 0;
+  for (uint32_t start = micros(); (micros() - start) < (ZC_DETECT_TIMEOUT_MS * 3000UL); ) {
+    uint16_t sample = (uint16_t)adcGmi.read();
+    if (!isFirst && ((lastSample > ADC_HALF) != (sample > ADC_HALF))) {
+      uint32_t now_us = micros();
+      // debounce: require at least 4 ms between accepted crossings
+      if (!count || (now_us - zcUs[0]) > 4000UL) {
+        zcUs[count++] = now_us;
+        if (count == 2) break;
+      }
+    }
+    isFirst = 0;
+    lastSample = sample;
+  }
+#else
+  if (hasCGMI()) {
+    // m328p CGMI: digital off-period pulses on pinAC2.
+    // Pin HIGH = AC voltage below detection threshold = near zero crossing.
+    // Use midpoint of each HIGH pulse as the ZC timestamp.
+    uint8_t inHigh = 0;
+    uint32_t risingUs = 0;
+    for (uint32_t start = micros(); (micros() - start) < (ZC_DETECT_TIMEOUT_MS * 3000UL); ) {
+      uint8_t pinState = pinAC2.read();
+      if (!inHigh && pinState) {
+        risingUs = micros();
+        inHigh = 1;
+      } else if (inHigh && !pinState) {
+        zcUs[count++] = risingUs + (micros() - risingUs) / 2;
+        inHigh = 0;
+        if (count == 2) break;
+      }
+    }
+  }
+#if defined(ACLINE1_REG) && defined(ACLINE2_REG)
+  else {
+    // Non-CGMI m328p: pinAC1 and pinAC2 are complementary diode half-wave
+    // channels — each is LOW for a full half-cycle (its non-conducting half).
+    // A rising edge on either channel marks the start of its half-cycle, which
+    // is a proxy for the zero crossing.  Alternating rising edges on opposite
+    // channels are one half-period apart; the diode threshold offset is the
+    // same on both channels so it cancels out in the interval measurement.
+    uint8_t lastAC1 = pinAC1.read(), lastAC2 = pinAC2.read();
+    uint8_t lastEdgePin = 0; // 1 = AC1, 2 = AC2
+    for (uint32_t start = micros(); (micros() - start) < (ZC_DETECT_TIMEOUT_MS * 3000UL); ) {
+      uint8_t ac1 = pinAC1.read(), ac2 = pinAC2.read();
+      uint8_t edgePin = 0;
+      if (!lastAC1 && ac1) edgePin = 1;
+      else if (!lastAC2 && ac2) edgePin = 2;
+      if (edgePin && edgePin != lastEdgePin) {
+        uint32_t now_us = micros();
+        if (!count || (now_us - zcUs[count - 1]) > 4000UL) {
+          zcUs[count++] = now_us;
+          lastEdgePin = edgePin;
+          if (count == 2) break;
+        }
+      }
+      lastAC1 = ac1;
+      lastAC2 = ac2;
+    }
+  }
+#endif // ACLINE1_REG && ACLINE2_REG
+#endif // TARGET_SAMD
+
+  if (count < 2) return 0;
+
+  uint32_t halfPeriodUs = zcUs[1] - zcUs[0];
+  if (halfPeriodUs < 5000UL || halfPeriodUs > 15000UL) return 0;  // 33–100 Hz sanity
+
+  m_AcFreqX100 = (uint16_t)(100000000UL / (2UL * halfPeriodUs));
+  *zcTimeMsOut = millis() - (uint32_t)((micros() - zcUs[1]) / 1000UL);
+  return halfPeriodUs;
+}
+
+// Shared timing core for relay close and open.  Detects a voltage ZC via the
+// GMI line (updating m_AcFreqX100 as a side effect), then delays so the relay
+// coil is energized/de-energized advanceMs before the next predicted ZC.
+// Falls through immediately if no ZC is detected.
+void J1772EVSEController::zcWaitRelay(uint8_t advanceMs)
+{
+  unsigned long zcTimeMs = 0;
+  uint32_t halfPeriodUs = measureAcFreq(&zcTimeMs);
+
+  if (!zcTimeMs) return;
+
+  uint8_t halfPeriodMs = (uint8_t)((halfPeriodUs + 500UL) / 1000UL);
+  uint8_t n = 1;
+  while ((uint16_t)(n * halfPeriodMs) < advanceMs) n++;
+  uint32_t switchAt = zcTimeMs + (uint32_t)n * halfPeriodMs - advanceMs;
+  unsigned long now = millis();
+  if (switchAt > now) delay(switchAt - now);
+}
+
+void J1772EVSEController::zcWaitRelayClose() { zcWaitRelay(RELAY_CLOSE_ADVANCE_MS); }
+void J1772EVSEController::zcWaitRelayOpen()  { zcWaitRelay(RELAY_OPEN_ADVANCE_MS); }
+#endif // RELAY_ZC_SWITCH
+
 #define MA_PTS 32 // # points in moving average MUST BE power of 2
 #define MA_BITS 5 // log2(MA_PTS)
 /*
@@ -163,10 +293,16 @@ J1772EVSEController::J1772EVSEController() :
 #ifdef VOLTMETER_PIN
   , adcVoltMeter(VOLTMETER_PIN)
 #endif
+#if defined(RELAY_ZC_SWITCH) && defined(TARGET_SAMD)
+  , adcGmi(GMI_ADC_PIN)
+#endif
 {
 #ifdef STATE_TRANSITION_REQ_FUNC
   m_StateTransitionReqFunc = NULL;
-#endif // STATE_TRANSITION_REQ_FUNC
+#endif
+#ifdef RELAY_ZC_SWITCH
+  m_AcFreqX100 = 0;
+#endif
 }
 
 void J1772EVSEController::SaveSettings()
@@ -282,6 +418,9 @@ void J1772EVSEController::ShowDisabledTests()
 
 void J1772EVSEController::chargingOn()
 {
+#ifdef RELAY_ZC_SWITCH
+  if (hasCGMI() && RelayZCSwitchEnabled()) zcWaitRelayClose();
+#endif
   // turn on charging current
 #ifdef OEV6
   if (isV6()) {
@@ -329,8 +468,16 @@ void J1772EVSEController::chargingOn()
   m_ChargeOnTimeMS = millis();
 }
 
-void J1772EVSEController::chargingOff()
+void J1772EVSEController::chargingOff(uint8_t emergency)
 {
+#ifdef RELAY_ZC_SWITCH
+  if (!emergency && chargingIsOn() && RelayZCSwitchEnabled()) {
+#ifdef AMMETER
+    waitCurrentZero();
+#endif
+    zcWaitRelayOpen();
+  }
+#endif
  // turn off charging current
 #ifdef OEV6
   if (isV6()) {
@@ -427,7 +574,7 @@ void J1772EVSEController::SetGfiTripped()
 
   // this is repeated in Update(), but we want to keep latency as low as possible
   // for safety so we do it here first anyway
-  chargingOff(); // turn off charging current
+  chargingOff(1); // GFI: emergency open — no zero-crossing wait
   // turn off the PWM
   m_Pilot.SetState(PILOT_STATE_P12);
 
