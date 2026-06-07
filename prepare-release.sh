@@ -5,7 +5,7 @@
 mkdir -p firmware/targets
 
 pio run -e m328p_noWiFi_RTC_BTN_LCD
-cp .pio/build/m328p_noWiFi_RTC_BTN_LCD/firmware.hex firmware/targets/m328p_openevse_noWiFi..hex
+cp .pio/build/m328p_noWiFi_RTC_BTN_LCD/firmware.hex firmware/targets/m328p_openevse_noWiFi.hex
 
 pio run -e m328p_TFT_WIFI
 cp .pio/build/m328p_TFT_WIFI/firmware.hex firmware/targets/m328p_openevse.hex
