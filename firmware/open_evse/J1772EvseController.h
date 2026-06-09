@@ -92,6 +92,12 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 #define ECF_RELAY_ZC_DISABLED  0x0800 // disable zero-crossing relay switching
 #define ECF_DEFAULT            0x0000
 
+// relay enable/disable flags - saved to EEPROM at EOFS_RELAY_FLAGS
+#define ERELAYF_DC1_DISABLED 0x01 // DC relay 1 disabled
+#define ERELAYF_DC2_DISABLED 0x02 // DC relay 2 disabled
+#define ERELAYF_AC_DISABLED  0x04 // AC relay disabled
+#define ERELAYF_DEFAULT      0x00 // all relays enabled
+
 // J1772EVSEController volatile m_wVFlags bits - not saved to EEPROM
 #define ECVF_AUTOSVCLVL_SKIPPED 0x0001 // auto svc level test skipped during post
 #define ECVF_HARD_FAULT         0x0002 // in non-autoresettable fault
@@ -186,6 +192,7 @@ class J1772EVSEController {
   uint8_t m_relayCloseMs; // #ms for DC pulse to close relay
   uint8_t m_relayHoldPwm; // PWM duty cycle to hold relay closed
 #endif // RELAY_PWM
+  uint8_t m_relayFlags; // ERELAYF_xxx - relay enable/disable bitmask
 #ifdef RELAY_ZC_SWITCH
   uint16_t m_AcFreqX100; // measured AC frequency × 100 (e.g. 6012 = 60.12 Hz); 0 = not yet measured
 #endif
@@ -338,6 +345,15 @@ public:
     m_relayHoldPwm = pwm;
   }
 #endif // RELAY_PWM
+
+  uint8_t GetRelayFlags() { return m_relayFlags; }
+  void SetRelayFlags(uint8_t flags) {
+    m_relayFlags = flags;
+    eeprom_write_byte((uint8_t*)EOFS_RELAY_FLAGS, m_relayFlags);
+  }
+  uint8_t RelayDC1Enabled() { return !(m_relayFlags & ERELAYF_DC1_DISABLED); }
+  uint8_t RelayDC2Enabled() { return !(m_relayFlags & ERELAYF_DC2_DISABLED); }
+  uint8_t RelayACEnabled()  { return !(m_relayFlags & ERELAYF_AC_DISABLED); }
 
   void SetHardFault() { setVFlags(ECVF_HARD_FAULT); }
   void ClrHardFault() { clrVFlags(ECVF_HARD_FAULT); }

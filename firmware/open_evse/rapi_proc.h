@@ -228,13 +228,21 @@ SY heartbeatinterval heartbeatcurrentlimit
  heartbeatinterval - seconds. 0 to disable
  heartbeatcurrentlimit - max current when no heartbeat within heartbeatinterval
  Response includes heartbeatinterval hearbeatcurrentlimit hearbeattrigger
- hearbeattrigger: 0 - There has never been a missed pulse, 
+ hearbeattrigger: 0 - There has never been a missed pulse,
  2 - there is a missed pulse, and HS is still in current limit
- 1 - There was a missed pulse once, but it has since been acknowledged. Ampacity has been successfully restored to max permitted 
+ 1 - There was a missed pulse once, but it has since been acknowledged. Ampacity has been successfully restored to max permitted
  $SY 100 6  //If no pulse for 100 seconds, set EVE ampacity limit to 6A until missed pulse is acknowledged
  $SY        //This is a heartbeat supervision pulse.  Need one every heartbeatinterval seconds.
  $SY 165    //This is an acknowledgement of a missed pulse.  Magic Cookie = 165 (=0XA5)
  When you send a pulse, an NK response indicates that a previous pulse was missed and has not yet been acked
+
+SR n 0|1 - enable/disable relay output (saved to EEPROM, applied at boot)
+ n: 1=DC relay 1, 2=DC relay 2, 3=AC relay
+ 0=disable 1=enable (all relays enabled by default)
+ $SR 1 0 - disable DC relay 1
+ $SR 2 0 - disable DC relay 2
+ $SR 3 0 - disable AC relay
+ $SR 1 1 - re-enable DC relay 1
 
 G0 - get EV connect state
  response: $OK connectstate
@@ -302,6 +310,11 @@ GH - get cHarge limit
  response: $OK kWh
  kWh = 0 = no charge limit
  $GH^2B
+
+GR - get relay enable status
+ response: $OK dc1 dc2 ac
+ dc1/dc2/ac: 1=enabled 0=disabled
+ $GR
 
 GI - get MCU ID - requires MCU_ID_LEN to be defined
  response: $OK mcuid

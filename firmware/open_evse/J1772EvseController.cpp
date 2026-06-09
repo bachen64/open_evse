@@ -428,30 +428,30 @@ void J1772EVSEController::chargingOn()
 //    Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
 //    Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
     // turn on charging pin to close relay
-    digitalWrite(V6_CHARGING_PIN,HIGH);
-    digitalWrite(V6_CHARGING_PIN2,HIGH);
+    if (RelayDC1Enabled()) digitalWrite(V6_CHARGING_PIN,HIGH);
+    if (RelayDC2Enabled()) digitalWrite(V6_CHARGING_PIN2,HIGH);
     delay(m_relayCloseMs);
     // switch to PWM to hold closed
-    analogWrite(V6_CHARGING_PIN,m_relayHoldPwm);
-    analogWrite(V6_CHARGING_PIN2,m_relayHoldPwm);
+    if (RelayDC1Enabled()) analogWrite(V6_CHARGING_PIN,m_relayHoldPwm);
+    if (RelayDC2Enabled()) analogWrite(V6_CHARGING_PIN2,m_relayHoldPwm);
 #else // !RELAY_PWM
-    digitalWrite(V6_CHARGING_PIN,HIGH);
-    digitalWrite(V6_CHARGING_PIN2,HIGH);
+    if (RelayDC1Enabled()) digitalWrite(V6_CHARGING_PIN,HIGH);
+    if (RelayDC2Enabled()) digitalWrite(V6_CHARGING_PIN2,HIGH);
 #endif // RELAY_PWM
   }
   else {
 #endif // OEV6
 #ifdef CHARGING_REG
-    pinCharging.write(1);
+    if (RelayDC1Enabled()) pinCharging.write(1);
 #endif
 #ifdef CHARGING2_REG
-    pinCharging2.write(1);
+    if (RelayDC2Enabled()) pinCharging2.write(1);
 #endif // CHARGING2_REG
 #ifdef OEV6
   }
 #endif // OEV6
 #ifdef CHARGINGAC_REG
-  pinChargingAC.write(1);
+  if (RelayACEnabled()) pinChargingAC.write(1);
 #endif
 
   setVFlags(ECVF_CHARGING_ON);
@@ -1145,6 +1145,11 @@ void J1772EVSEController::Init()
 //  Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
 //  Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
 #endif // RELAY_PWM
+
+  m_relayFlags = eeprom_read_byte((uint8_t*)EOFS_RELAY_FLAGS);
+  if (m_relayFlags == 0xff) { // uninitialized EEPROM
+    m_relayFlags = ERELAYF_DEFAULT;
+  }
 
 
 #ifdef OEV6

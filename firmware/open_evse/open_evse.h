@@ -519,6 +519,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #define EOFS_RELAY_CLOSE_MS 37 // 1 byte
 #define EOFS_RELAY_HOLD_PWM 38 // 1 byte
+#define EOFS_RELAY_FLAGS    39 // 1 byte - relay enable/disable bitmask (ERELAYF_xxx)
 
 #define EOFS_MAX_HW_CURRENT_CAPACITY 511 // 1 byte
 

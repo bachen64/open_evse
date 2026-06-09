@@ -624,9 +624,29 @@ int EvseRapiProcessor::processCmd()
         rc = 1; //Invalid number of tokens
       }
       sprintf(buffer,"%d %d %d", g_EvseController.GetHearbeatInterval(), g_EvseController.GetHearbeatCurrent(), g_EvseController.GetHearbeatTrigger());
-      bufCnt = 1; 
+      bufCnt = 1;
       break;
 #endif //HEARTBEAT_SUPERVISION
+
+    case 'R': // relay enable/disable  $SR n 0|1
+      if (tokenCnt == 3) {
+        u1.u8 = (uint8_t)dtoi32(tokens[1]); // relay number 1=DC1 2=DC2 3=AC
+        u2.u8 = (*tokens[2] != '0') ? 1 : 0; // 1=enable 0=disable
+        switch (u1.u8) {
+        case 1: u3.u8 = ERELAYF_DC1_DISABLED; break;
+        case 2: u3.u8 = ERELAYF_DC2_DISABLED; break;
+        case 3: u3.u8 = ERELAYF_AC_DISABLED;  break;
+        default: u3.u8 = 0; break;
+        }
+        if (u3.u8) {
+          u4.u8 = g_EvseController.GetRelayFlags();
+          if (u2.u8) u4.u8 &= ~u3.u8;
+          else       u4.u8 |=  u3.u8;
+          g_EvseController.SetRelayFlags(u4.u8);
+          rc = 0;
+        }
+      }
+      break;
 
     }
     break;
@@ -859,6 +879,15 @@ int EvseRapiProcessor::processCmd()
       rc = 0;
       break;
 #endif // RELAY_ZC_SWITCH
+
+    case 'R': // get relay enable status  $GR
+      sprintf(buffer,"%d %d %d",
+        (int)g_EvseController.RelayDC1Enabled(),
+        (int)g_EvseController.RelayDC2Enabled(),
+        (int)g_EvseController.RelayACEnabled());
+      bufCnt = 1;
+      rc = 0;
+      break;
 
     }
     break;
