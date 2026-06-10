@@ -12,12 +12,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - env: m328p_TFT_WIFI
+          - env: m328p_core
             python: 3.x
             platformio: 6.1.5
             arch: avr
             artifact: firmware.hex
-          - env: m328p_noWiFi_RTC_BTN_LCD
+          - env: m328p_LCD_WIFI
+            python: 3.x
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: m328p_noWiFi
             python: 3.x
             platformio: 6.1.5
             arch: avr
