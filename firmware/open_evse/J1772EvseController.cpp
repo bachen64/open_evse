@@ -798,7 +798,8 @@ uint8_t J1772EVSEController::GetMaxCurrentCapacity()
   }
 
 #ifdef PP_AUTO_AMPACITY
-  if ((m_EvseState >= EVSE_STATE_B) && (m_EvseState <= EVSE_STATE_C)) {
+  if (g_ACCController.IsEnabled() &&
+      (m_EvseState >= EVSE_STATE_B) && (m_EvseState <= EVSE_STATE_C)) {
     uint8_t ppamps =  g_ACCController.GetPPMaxAmps();
     if (ppamps < ampacity) {
       ampacity = ppamps;
