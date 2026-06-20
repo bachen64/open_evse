@@ -33,18 +33,6 @@
 const char RAPI_VER[] PROGMEM = RAPIVER;
 
 
-#ifdef MCU_ID_LEN
-// mcuid *must* be of size MCU_ID_LEN
-#include <avr/boot.h>
-void getMcuId(uint8_t *mcuid)
-{
-  for (int i=0;i < MCU_ID_LEN;i++) {
-    mcuid[i] = boot_signature_byte_get(0x0E + i);
-  }
-}
-#endif // MCU_ID_LEN
-
-
 // convert 2-digit hex string to uint8_t
 uint8_t htou8(const char *s)
 {
@@ -71,15 +59,25 @@ uint8_t htou8(const char *s)
   return u;
 }
 
-// convert decimal string to uint32_t
-uint32_t dtou32(const char *s)
+
+// convert decimal string to int32_t
+uint32_t dtoi32(const char *s)
 {
-  uint32_t u = 0;
-  while (*s) {
-    u *= 10;
-    u += *(s++) - '0';
+  int minus;
+  int32_t i = 0;
+  if (*s == '-') {
+    minus = 1;
+    s++;
   }
-  return u;
+  else minus = 0;
+  
+  while (*s) {
+    i *= 10;
+    i += *(s++) - '0';
+  }
+  if (minus) i = -i;
+
+  return i;
 }
 
 #ifdef RAPI_I2C
@@ -162,7 +160,7 @@ void EvseRapiProcessor::sendBootNotification()
 
 void EvseRapiProcessor::sendEvseState()
 {
-    sprintf(g_sTmp,"%cAT %02x %02x %d %04x",ESRAPI_SOC,g_EvseController.GetState(),g_EvseController.GetPilotState(),g_EvseController.GetCurrentCapacity(),g_EvseController.GetVFlags());
+  sprintf(g_sTmp,"%cAT %02x %02x %d %04x",ESRAPI_SOC,g_EvseController.GetState(),g_EvseController.GetPilotState(),g_EvseController.GetCurrentCapacity(),g_EvseController.GetVFlags());
   appendChk(g_sTmp);
   writeStart();
   write(g_sTmp);
@@ -285,11 +283,16 @@ int EvseRapiProcessor::processCmd()
 #ifdef LCD16X2
     case 'B': // LCD backlight
       if (tokenCnt == 2) {
-	g_OBD.LcdSetBacklightColor(dtou32(tokens[1]));
+	g_OBD.LcdSetBacklightColor(dtoi32(tokens[1]));
 	rc = 0;
       }
       break;
 #endif // LCD16X2
+    case 'C': // reset fault counters + total energy
+      g_EvseController.ResetFaultCounters();
+      g_EnergyMeter.ResetTotkWh();
+      rc = 0;
+      break;
     case 'D': // disable EVSE
       g_EvseController.Disable();
       rc = 0;
@@ -326,6 +329,21 @@ int EvseRapiProcessor::processCmd()
 	    g_EvseController.EnableStuckRelayChk(u1.u8);
 	    break;
 #endif // ADVPWR
+#ifdef BOOTLOCK
+	  case 'L': // boot lock
+	    g_EvseController.EnableBootLock(u1.u8);
+	    break;
+#endif // BOOTLOCK
+#ifdef OVERCURRENT_THRESHOLD
+	  case 'O': // overcurrent check
+	    g_EvseController.EnableOverCurrentCheck(u1.u8);
+	    break;
+#endif // OVERCURRENT_THRESHOLD
+#ifdef PP_AUTO_AMPACITY
+	  case 'P': // PP auto ampacity 
+	    g_EvseController.EnablePPAutoAmpacity(u1.u8);
+	    break;
+#endif // PP_AUTO_AMPACITY
 #ifdef TEMPERATURE_MONITORING
 	  case 'T': // temperature monitoring
 	    g_EvseController.EnableTempChk(u1.u8);
@@ -334,17 +352,33 @@ int EvseRapiProcessor::processCmd()
 	  case 'V': // vent required check
 	    g_EvseController.EnableVentReq(u1.u8);
 	    break;
+#ifdef RELAY_ZC_SWITCH
+	  case 'Z': // zero-crossing relay switch
+	    g_EvseController.EnableRelayZCSwitch(u1.u8);
+	    break;
+#endif // RELAY_ZC_SWITCH
 	  default: // unknown
 	    rc = -1;
 	  }
 	}
       }
       break;
+#ifdef TEMPERATURE_MONITORING
+    case 'O': // print to LCD
+      if (tokenCnt == 2) {
+        u1.i16 = dtoi32(tokens[1]);
+        if (u1.i16 > 0) {
+          g_TempMonitor.SetPanicTemperature(u1.i16);
+          rc = 0;
+        }
+      }
+      break;
+#endif // TEMPERATURE_MONITORING
 #ifdef LCD16X2
     case 'P': // print to LCD
       if ((tokenCnt >= 4) && !g_EvseController.InHardFault()) {
-	u1.u = dtou32(tokens[1]); // x
-	u2.u = dtou32(tokens[2]); // y
+	u1.u = dtoi32(tokens[1]); // x
+	u2.u = dtoi32(tokens[2]); // y
 	// now restore the spaces that were replaced w/ nulls by tokenizing
 	for (u3.i=4;u3.i < tokenCnt;u3.i++) {
 	  *(tokens[u3.i]-1) = ' ';
@@ -376,16 +410,16 @@ int EvseRapiProcessor::processCmd()
       }
       break;
 #endif // LCD16X2
-#ifdef RTC
+#ifdef HAVE_RTC
     case '1': // set RTC
       if (tokenCnt == 7) {
 	extern void SetRTC(uint8_t y,uint8_t m,uint8_t d,uint8_t h,uint8_t mn,uint8_t s);
-	SetRTC(dtou32(tokens[1]),dtou32(tokens[2]),dtou32(tokens[3]),
-	       dtou32(tokens[4]),dtou32(tokens[5]),dtou32(tokens[6]));
+	SetRTC(dtoi32(tokens[1]),dtoi32(tokens[2]),dtoi32(tokens[3]),
+	       dtoi32(tokens[4]),dtoi32(tokens[5]),dtoi32(tokens[6]));
 	rc = 0;
       }
       break;
-#endif // RTC
+#endif // HAVE_RTC
 #if defined(AMMETER) && defined(ECVF_AMMETER_CAL)
     case '2': // ammeter calibration mode
       if (tokenCnt == 2) {
@@ -398,7 +432,7 @@ int EvseRapiProcessor::processCmd()
     case '3': // set time limit
       if (tokenCnt == 2) {
 	if (g_EvseController.LimitsAllowed()) {
-	  g_EvseController.SetTimeLimit15(dtou32(tokens[1]));
+	  g_EvseController.SetTimeLimit15(dtoi32(tokens[1]));
 	  if (!g_OBD.UpdatesDisabled()) g_OBD.Update(OBD_UPD_FORCE);
 	  rc = 0;
 	}
@@ -408,7 +442,7 @@ int EvseRapiProcessor::processCmd()
 #if defined(AUTH_LOCK) && !defined(AUTH_LOCK_REG)
     case '4': // auth lock
       if (tokenCnt == 2) {
-	g_EvseController.AuthLock((int8_t)dtou32(tokens[1]),1);
+	g_EvseController.AuthLock((int8_t)dtoi32(tokens[1]),1);
 	rc = 0;
       }
       break;
@@ -439,8 +473,8 @@ int EvseRapiProcessor::processCmd()
 #ifdef AMMETER
     case 'A':
       if (tokenCnt == 3) {
-	g_EvseController.SetCurrentScaleFactor(dtou32(tokens[1]));
-	g_EvseController.SetAmmeterCurrentOffset(dtou32(tokens[2]));
+	g_EvseController.SetCurrentScaleFactor(dtoi32(tokens[1]));
+	g_EvseController.SetAmmeterCurrentOffset(dtoi32(tokens[2]));
 	rc = 0;
       }
       break;
@@ -460,7 +494,7 @@ int EvseRapiProcessor::processCmd()
 #endif // BOOTLOCK
     case 'C': // current capacity
       if ((tokenCnt == 2) || (tokenCnt == 3)) {
-	u2.u8 = dtou32(tokens[1]);
+	u2.u8 = dtoi32(tokens[1]);
 	if ((tokenCnt == 3) && (*tokens[2] == 'M')) {
 	  rc = g_EvseController.SetMaxHwCurrentCapacity(u2.u8);
 	  sprintf(buffer,"%d",(int)g_EvseController.GetMaxHwCurrentCapacity());
@@ -496,7 +530,7 @@ int EvseRapiProcessor::processCmd()
     case 'H': // cHarge limit
       if (tokenCnt == 2) {
 	if (g_EvseController.LimitsAllowed()) {
-	  g_EvseController.SetChargeLimitkWh(dtou32(tokens[1]));
+	  g_EvseController.SetChargeLimitkWh(dtoi32(tokens[1]));
 	  if (!g_OBD.UpdatesDisabled()) g_OBD.Update(OBD_UPD_FORCE);
 	  rc = 0;
 	}
@@ -505,7 +539,7 @@ int EvseRapiProcessor::processCmd()
 #endif // CHARGE_LIMIT
 #ifdef KWH_RECORDING
     case 'K': // set accumulated kwh
-      g_EnergyMeter.SetTotkWh(dtou32(tokens[1]));
+      g_EnergyMeter.SetTotkWh(dtoi32(tokens[1]));
       g_EnergyMeter.SaveTotkWh();
       rc = 0;
       break;
@@ -533,7 +567,7 @@ int EvseRapiProcessor::processCmd()
 #ifdef VOLTMETER
     case 'M':
       if (tokenCnt == 3) {
-        g_EvseController.SetVoltmeter(dtou32(tokens[1]),dtou32(tokens[2]));
+        g_EvseController.SetVoltmeter(dtoi32(tokens[1]),dtoi32(tokens[2]));
 	rc = 0;
       }
       break;
@@ -542,10 +576,10 @@ int EvseRapiProcessor::processCmd()
     case 'T': // timer
       if (tokenCnt == 5) {
 	extern DelayTimer g_DelayTimer;
-	u1.u8 = (uint8_t)dtou32(tokens[1]);
-	u2.u8 = (uint8_t)dtou32(tokens[2]);
-	u3.u8 = (uint8_t)dtou32(tokens[3]);
-	u4.u8 = (uint8_t)dtou32(tokens[4]);
+	u1.u8 = (uint8_t)dtoi32(tokens[1]);
+	u2.u8 = (uint8_t)dtoi32(tokens[2]);
+	u3.u8 = (uint8_t)dtoi32(tokens[3]);
+	u4.u8 = (uint8_t)dtoi32(tokens[4]);
 	if ((u1.u8 == 0) && (u2.u8 == 0) && (u3.u8 == 0) && (u4.u8 == 0)) {
 	  g_DelayTimer.Disable();
 	}
@@ -562,7 +596,7 @@ int EvseRapiProcessor::processCmd()
 #if defined(KWH_RECORDING) && !defined(VOLTMETER)
     case 'V': // set voltage
       if (tokenCnt == 2) {
-        g_EvseController.SetMV(dtou32(tokens[1]));
+        g_EvseController.SetMV(dtoi32(tokens[1]));
 	rc = 0;
       }
       break;
@@ -575,24 +609,44 @@ int EvseRapiProcessor::processCmd()
       }
       else if (tokenCnt == 3) { //This is a full HEARTBEAT_SUPERVISION setpoint command with both parameters
 	    rc = 0;
-        u1.u16 = (uint16_t)dtou32(tokens[1]);	// HS Interval in seconds.  0 = disabled
-        u2.u8 = (uint8_t)dtou32(tokens[2]);	// HS fallback current, in amperes 
+        u1.u16 = (uint16_t)dtoi32(tokens[1]);	// HS Interval in seconds.  0 = disabled
+        u2.u8 = (uint8_t)dtoi32(tokens[2]);	// HS fallback current, in amperes 
 		if (u1.u16 == 0) { //Test for deactivation {
           rc = g_EvseController.HsRestoreAmpacity();
 		}
 		rc |= g_EvseController.HeartbeatSupervision(u1.u16, u2.u8);
       }
       else if (tokenCnt == 2) { //This is a command to ack a heartbeat supervision miss
-        u1.u8 = (uint8_t)dtou32(tokens[1]); //Magic cookie
+        u1.u8 = (uint8_t)dtoi32(tokens[1]); //Magic cookie
         rc = g_EvseController.HsAckMissedPulse(u1.u8);
       }
       else { //Invalid number of tokens, return 1
         rc = 1; //Invalid number of tokens
       }
       sprintf(buffer,"%d %d %d", g_EvseController.GetHearbeatInterval(), g_EvseController.GetHearbeatCurrent(), g_EvseController.GetHearbeatTrigger());
-      bufCnt = 1; 
+      bufCnt = 1;
       break;
 #endif //HEARTBEAT_SUPERVISION
+
+    case 'R': // relay enable/disable  $SR n 0|1
+      if (tokenCnt == 3) {
+        u1.u8 = (uint8_t)dtoi32(tokens[1]); // relay number 1=DC1 2=DC2 3=AC
+        u2.u8 = (*tokens[2] != '0') ? 1 : 0; // 1=enable 0=disable
+        switch (u1.u8) {
+        case 1: u3.u8 = ERELAYF_DC1_DISABLED; break;
+        case 2: u3.u8 = ERELAYF_DC2_DISABLED; break;
+        case 3: u3.u8 = ERELAYF_AC_DISABLED;  break;
+        default: u3.u8 = 0; break;
+        }
+        if (u3.u8) {
+          u4.u8 = g_EvseController.GetRelayFlags();
+          if (u2.u8) u4.u8 &= ~u3.u8;
+          else       u4.u8 |=  u3.u8;
+          g_EvseController.SetRelayFlags(u4.u8);
+          rc = 0;
+        }
+      }
+      break;
 
     }
     break;
@@ -725,6 +779,7 @@ int EvseRapiProcessor::processCmd()
         uint8_t mcuid[MCU_ID_LEN];
         getMcuId(mcuid);
         char *s = buffer;
+#ifdef TARGET_M238P
         *(s++) = ' ';
         for (int i=0;i < 6;i++) {
           *(s++) = mcuid[i];
@@ -733,6 +788,12 @@ int EvseRapiProcessor::processCmd()
           sprintf(s,"%02X",mcuid[i]);
           s += 2;
         }
+#else
+        for (int i=0;i < MCU_ID_LEN;i++) {
+          sprintf(s,"%02X",mcuid[i]);
+          s += 2;
+        }
+#endif
         bufCnt = 1; // flag response text output
         rc = 0;
       }
@@ -748,15 +809,12 @@ int EvseRapiProcessor::processCmd()
       break;
 #endif // VOLTMETER
 #ifdef TEMPERATURE_MONITORING
-#ifdef TEMPERATURE_MONITORING_NY
     case 'O':
-      u1.i = g_TempMonitor.m_ambient_thresh;
-      u2.i = g_TempMonitor.m_ir_thresh;
-      sprintf(buffer,"%d %d",u1.i,u2.i);
+      u1.i = g_TempMonitor.m_panicTemperature;
+      sprintf(buffer,"%d",u1.i);
       bufCnt = 1; // flag response text output
       rc = 0;
       break;
-#endif // TEMPERATURE_MONITORING_NY
     case 'P':
       sprintf(buffer,"%d %d %d",(int)g_TempMonitor.m_DS3231_temperature,
 	      (int)g_TempMonitor.m_MCP9808_temperature,
@@ -776,18 +834,22 @@ int EvseRapiProcessor::processCmd()
       u1.u8 = g_EvseController.GetState();
       u2.u8 = g_EvseController.GetPilotState();
       u3.u16 = g_EvseController.GetVFlags();
+#ifdef TARGET_M328P
       sprintf(buffer,"%02x %ld %02x %04x",u1.u8,g_EvseController.GetElapsedChargeTime(),u2.u8,u3.u16);
+#else
+      sprintf(buffer,"%02x %ld %02x %04x",u1.u8,(long int)g_EvseController.GetElapsedChargeTime(),u2.u8,u3.u16);
+#endif
       bufCnt = 1; // flag response text output
       rc = 0;
       break;
-#ifdef RTC
+#ifdef HAVE_RTC
     case 'T': // get time
       extern void GetRTC(char *buf);
       GetRTC(buffer);
       bufCnt = 1; // flag response text output
       rc = 0;
       break;
-#endif // RTC
+#endif // HAVE_RTC
 #ifdef KWH_RECORDING
     case 'U':
       sprintf(buffer,"%lu %lu",g_EnergyMeter.GetSessionWs(),g_EnergyMeter.GetTotkWh());
@@ -806,11 +868,27 @@ int EvseRapiProcessor::processCmd()
 #ifdef HEARTBEAT_SUPERVISION
     case 'Y': // HEARTBEAT SUPERVISION
 	  sprintf(buffer,"%d %d %d", g_EvseController.GetHearbeatInterval(), g_EvseController.GetHearbeatCurrent(), g_EvseController.GetHearbeatTrigger());
-      bufCnt = 1; 
+      bufCnt = 1;
 	  rc = 0;
       break;
 #endif //HEARTBEAT_SUPERVISION
-	   
+#ifdef RELAY_ZC_SWITCH
+    case 'Z': // get AC frequency
+      sprintf(buffer,"%u", g_EvseController.GetAcFreqX100());
+      bufCnt = 1;
+      rc = 0;
+      break;
+#endif // RELAY_ZC_SWITCH
+
+    case 'R': // get relay enable status  $GR
+      sprintf(buffer,"%d %d %d",
+        (int)g_EvseController.RelayDC1Enabled(),
+        (int)g_EvseController.RelayDC2Enabled(),
+        (int)g_EvseController.RelayACEnabled());
+      bufCnt = 1;
+      rc = 0;
+      break;
+
     }
     break;
 
@@ -820,7 +898,7 @@ int EvseRapiProcessor::processCmd()
 #ifdef FAKE_CHARGING_CURRENT
     case '0': // set fake charging current
       if (tokenCnt == 2) {
-	g_EvseController.SetChargingCurrent(dtou32(tokens[1])*1000);
+	g_EvseController.SetChargingCurrent(dtoi32(tokens[1])*1000);
 	g_OBD.SetAmmeterDirty(1);
 	g_OBD.Update(OBD_UPD_FORCE);
 	rc = 0;
@@ -830,13 +908,13 @@ int EvseRapiProcessor::processCmd()
     }
     break;
 #endif //RAPI_T_COMMANDS
-#if defined(RELAY_HOLD_DELAY_TUNING)
+#if defined(RELAY_PWM) && defined(RELAY_HOLD_DELAY_TUNING)
   case 'Z': // reserved op
     switch(*s) {
     case '0': // set relayCloseMs
       if (tokenCnt == 3) {
-	u1.u8 = dtou32(tokens[1]);
-	u2.u8 = dtou32(tokens[2]);
+	u1.u8 = dtoi32(tokens[1]);
+	u2.u8 = dtoi32(tokens[2]);
 	g_EvseController.setPwmPinParms(u1.u8,u2.u8);
 	sprintf(g_sTmp,"\nZ0 %u %u",(unsigned)u1.u8,(unsigned)u2.u8);
 	Serial.println(g_sTmp);
@@ -1030,6 +1108,7 @@ EvseSerialRapiProcessor::EvseSerialRapiProcessor()
 
 void EvseSerialRapiProcessor::init()
 {
+  RAPI_SERIAL_PORT.begin(SERIAL_BAUD);
   EvseRapiProcessor::init();
 }
 #endif // RAPI_SERIAL
@@ -1062,11 +1141,11 @@ EvseI2cRapiProcessor g_EIRP;
 void RapiInit()
 {
 #ifdef RAPI_SERIAL
-  g_ESRP.init();
 #ifdef GPPBUGKLUDGE
   static char g_rapiSerialBuffer[ESRAPI_BUFLEN];
   g_ESRP.setBuffer(g_rapiSerialBuffer);
 #endif // GPPBUGKLUDGE
+  g_ESRP.init();
 #endif // RAPI_SERIAL
 #ifdef RAPI_I2C
   g_EIRP.init();

@@ -116,10 +116,17 @@ colors:
  WHITE 7
 
  $FB 7*03 - set backlight to white
+FC - reset fault counters and total energy
 FD - disable EVSE
  $FD*AE
 FE - enable EVSE
  $FE*AF
+FO set Overtemperature threshold
+ $FO panicthresh
+ panicthresh in 10ths of a degree Celsius
+ $FO 705 - set panic threshold to 70.5C
+ if temperature exceeds panicthresh, EVSE goes into OVER_TEMPERATURE fault state
+
 FP x y text - print text on lcd display
   OPTIONAL: can substitute character 0x11 for spaces within a string, because they print as <SPC> on HD44780. More reliable.
 FR - restart EVSE
@@ -138,9 +145,13 @@ FF - enable/disable feature
    after its replies. Valid only over a serial connection, DO NOT USE on I2C
   F = GFI self test
   G = Ground check
+  L = boot Lock
+  O = overcurrent check
+  P = PP auto ampacity
   R = stuck Relay check
   T = temperature monitoring
   V = Vent required check
+  Z = zero-cross detection for relay switching
  $FF D 0 - disable diode check
  $FF G 1 - enable ground check
 
@@ -213,15 +224,25 @@ SV mv - Set Voltage for power calculations to mv millivolts
  NOTES:
   - only available if VOLTMETER not defined and KWH_RECORDING defined
   - volatile - value is lost, and replaced with VOLTS_FOR_Lx at boot
-SY heartbeatinterval hearbeatcurrentlimit
+SY heartbeatinterval heartbeatcurrentlimit
+ heartbeatinterval - seconds. 0 to disable
+ heartbeatcurrentlimit - max current when no heartbeat within heartbeatinterval
  Response includes heartbeatinterval hearbeatcurrentlimit hearbeattrigger
- hearbeattrigger: 0 - There has never been a missed pulse, 
+ hearbeattrigger: 0 - There has never been a missed pulse,
  2 - there is a missed pulse, and HS is still in current limit
- 1 - There was a missed pulse once, but it has since been acknowledged. Ampacity has been successfully restored to max permitted 
+ 1 - There was a missed pulse once, but it has since been acknowledged. Ampacity has been successfully restored to max permitted
  $SY 100 6  //If no pulse for 100 seconds, set EVE ampacity limit to 6A until missed pulse is acknowledged
  $SY        //This is a heartbeat supervision pulse.  Need one every heartbeatinterval seconds.
  $SY 165    //This is an acknowledgement of a missed pulse.  Magic Cookie = 165 (=0XA5)
  When you send a pulse, an NK response indicates that a previous pulse was missed and has not yet been acked
+
+SR n 0|1 - enable/disable relay output (saved to EEPROM, applied at boot)
+ n: 1=DC relay 1, 2=DC relay 2, 3=AC relay
+ 0=disable 1=enable (all relays enabled by default)
+ $SR 1 0 - disable DC relay 1
+ $SR 2 0 - disable DC relay 2
+ $SR 3 0 - disable AC relay
+ $SR 1 1 - re-enable DC relay 1
 
 G0 - get EV connect state
  response: $OK connectstate
@@ -290,22 +311,32 @@ GH - get cHarge limit
  kWh = 0 = no charge limit
  $GH^2B
 
+GR - get relay enable status
+ response: $OK dc1 dc2 ac
+ dc1/dc2/ac: 1=enabled 0=disabled
+ $GR
+
 GI - get MCU ID - requires MCU_ID_LEN to be defined
  response: $OK mcuid
- mcuid: AVR serial number
-        mcuid is 6 ASCII characters followed by 4 hex digits
-        first hex digit = FF for 328P
-  WARNING: mcuid is guaranteed to be unique only for the 328PB. Uniqueness is
-	unknown in 328P. The first 6 characters are ASCII, and the rest are
-	hexadecimal.
+ mcuid: MCU serial number
+  AVR:
+    mcuid is 6 ASCII characters followed by 8 hex digits
+    first hex digit = FF for 328P
+    WARNING: mcuid is guaranteed to be unique only for the 328PB. Uniqueness is
+    unknown in 328P. The first 6 characters are ASCII, and the rest are
+    hexadecimal.
+  SAMD:
+   mcuid is 128-bit number
+   returned as a 32-character hex string
 
 GM - get voltMeter settings
  response: $OK voltcalefactor voltoffset
  $GM^2E
 
-GO get Overtemperature thresholds
- response: $OK ambientthresh irthresh
- thresholds are in 10ths of a degree Celcius
+GO get Overtemperature threshold
+ response: $OK panicthresh
+ panicthresh in 10ths of a degree Celsius
+ if temperature exceeds panicthresh, EVSE goes into OVER_TEMPERATURE fault state
  $GO^2C
 GP - get temPerature (v1.0.3+)
  response: $OK ds3231temp mcp9808temp tmp007temp
@@ -347,10 +378,19 @@ T0 amps - set fake charging current
  
 GY - Get Hearbeat Supervision Status
  Response includes heartbeatinterval hearbeatcurrentlimit hearbeattrigger
- hearbeattrigger: 0 - There has never been a missed pulse, 
+ hearbeattrigger: 0 - There has never been a missed pulse,
  2 - there is a missed pulse, and HS is still in current limit
- 1 - There was a missed pulse once, but it has since been acknkoledged. Ampacity has been successfully restored to max permitted 
+ 1 - There was a missed pulse once, but it has since been acknkoledged. Ampacity has been successfully restored to max permitted
  See SY above for worked expamples.
+
+GZ - get AC line frequency (requires RELAY_ZC_SWITCH)
+ response: $OK freqx100
+ freqx100(decimal): measured AC frequency * 100, e.g. 6012 = 60.12 Hz
+ 0 = frequency not yet measured (no relay operation has occurred since boot)
+ CGMI hardware: updated on relay close (zcWaitRelayClose) and open (zcWaitRelayOpen)
+ non-CGMI hardware: updated on relay open only (zcWaitRelayOpen); AC pins are
+   load-side on older non-V6 boards so no valid signal is available at relay close
+ $GZ^38
 
 Z0 FOR TESTING RELAY_AUTO_PWM_PIN ONLY
 Z0 closems holdpwm
@@ -363,7 +403,7 @@ Z0 closems holdpwm
 
 #ifdef RAPI
 
-#define RAPIVER "5.2.1"
+#define RAPIVER "6.0.0"
 
 #define WIFI_MODE_AP 0
 #define WIFI_MODE_CLIENT 1
@@ -445,10 +485,10 @@ public:
 
 #ifdef RAPI_SERIAL
 class EvseSerialRapiProcessor : public EvseRapiProcessor {
-  int available() { return Serial.available(); }
-  int read() { return Serial.read(); }
-  int write(uint8_t u8) { return Serial.write(u8); }
-  int write(const char *str) { return Serial.write(str); }
+  int available() { return RAPI_SERIAL_PORT.available(); }
+  int read() { return RAPI_SERIAL_PORT.read(); }
+  int write(uint8_t u8) { return RAPI_SERIAL_PORT.write(u8); }
+  int write(const char *str) { return RAPI_SERIAL_PORT.write(str); }
 
 public:
   EvseSerialRapiProcessor();

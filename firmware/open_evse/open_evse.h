@@ -31,19 +31,12 @@
 
 #define OPEN_EVSE
 
-#include <avr/wdt.h>
-#include <avr/pgmspace.h>
-#include <avr/eeprom.h>
 #include <pins_arduino.h>
-#include "./Wire.h"
-#include "avrstuff.h"
+#include "Wire.h"
 #include "i2caddr.h"
-
-#if defined(ARDUINO) && (ARDUINO >= 100)
+#include "pindefs.h"
 #include "Arduino.h"
-#else
-#include "WProgram.h" // shouldn't need this but arduino sometimes messes up and puts inside an #ifdef
-#endif // ARDUINO
+#include "target.h"
 
 #define setBits(flags,bits) (flags |= (bits))
 #define clrBits(flags,bits) (flags &= ~(bits))
@@ -54,25 +47,33 @@
 
 #include "Language_default.h"   //Default language should always be included as bottom layer
 
-typedef unsigned long time_t;
-
 //Language preferences: Add your custom languagefile here. See Language_default.h for more info.
 //#include "Language_norwegian.h"
+
+
+#ifdef OEV6
+// set by autodetection code in target.cpp initTarget()
+extern bool g_isV6;
+#endif // OEV6
+extern bool g_hasCGMI;
+
+
 
 //-- begin features
 
 #ifndef PLATFORMIO
+//
+// n.b. the items in this block are active only when building w/ Arduino IDE
+// when using PlatformIO, all features must be configured via platformio.ini
+//
 //#define OCPP
 // support V6 hardware
 #define OEV6
 #ifdef OEV6
-//#define INVERT_V6_DETECTION // DO NOT USE: ONLY FOR lincomatic's BETA V6 board
 #define RELAY_PWM
 #define RELAY_HOLD_DELAY_TUNING // enable Z0
-#endif // OEV6
 
-// enable CGMI support
-//#define ENABLE_CGMI
+#endif // OEV6
 
 // auto detect L1/L2
 #ifndef NO_AUTOSVCLEVEL
@@ -140,11 +141,9 @@ typedef unsigned long time_t;
 
 #endif // !PLATFORMIO
 
-// enable $GI
-#define MCU_ID_LEN 10
 
 // enable watchdog timer
-#define WATCHDOG
+//#define WATCHDOG
 
 #ifdef PP_AUTO_AMPACITY
 #define STATE_TRANSITION_REQ_FUNC
@@ -192,8 +191,17 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif //UL_COMPLIANT
 
 #define TEMPERATURE_MONITORING  // Temperature monitoring support
+// TEMPERATURE_THROTTLING enables adjusting max current based on temperature
+// if not defined, and TEMPERATURE_MONITORING is enabled, then only
+// TEMPERATURE_AMBIENT_PANIC is checked
+//#define TEMPERATURE_THROTTLING
 
-#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
+
+//#define HEARTBEAT_SUPERVISION // Heartbeat Supervision support
+
+#ifdef MENNEKES_LOCK
+#include "MennekesLock.h"
+#endif
 
 #ifdef AMMETER
 
@@ -230,7 +238,7 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif //AMMETER
 
 //Adafruit RGBLCD (MCP23017) - can have RGB or monochrome backlight
-#define RGBLCD
+//#define RGBLCD
 
 //select default LCD backlight mode. can be overridden w/CLI/RAPI
 #define BKL_TYPE_MONO 0
@@ -259,7 +267,7 @@ extern AutoCurrentCapacityController g_ACCController;
 // How to use 1-button menu
 // Long press activates menu
 // When within menus, short press cycles menu items, long press selects and exits current submenu
-#define BTN_MENU
+//#define BTN_MENU
 
 // take out basic setup stuff that the user really shouldn't be changing,
 // which can be set via RAPI/WiFi module.. reclaims a lot of code space
@@ -276,11 +284,11 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // RGBLCD
 #endif // BTN_MENU
 
-// Option for RTC and DelayTime
+// Option for HAVE_RTC and DelayTime
 // REQUIRES HARDWARE RTC: DS1307 or DS3231 connected via I2C
-#define RTC // enable RTC & timer functions
+//#define HAVE_RTC // enable RTC & timer functions
 
-#ifdef RTC
+#ifdef HAVE_RTC
 // Option for Delay Timer - GoldServe
 #define DELAYTIMER
 
@@ -288,7 +296,7 @@ extern AutoCurrentCapacityController g_ACCController;
 #define DELAYTIMER_MENU
 #endif
 
-#else // !RTC
+#else // !HAVE_RTC
 // this weird error comes out if RTC not defined, due to a bug in g++
 //D:\git\open_evse\firmware\open_evse\open_evse.ino: In function 'ProcessInputs'//:
 //
@@ -304,27 +312,12 @@ extern AutoCurrentCapacityController g_ACCController;
 //
 ////        (subreg:QI (reg/f:HI 1065) 1)) C:\Users\Geek\AppData\Local\Temp\arduino_build_853681\sketch\rapi_proc.cpp:418 1 {pushqi1}
 #define GPPBUGKLUDGE
-#endif // RTC
+#endif // HAVE_RTC
 
 #ifdef OCPP
 #define AUTH_LOCK 1
 #define RAPI_SERIAL
 #endif // OCPP
-
-
-// if defined, this pin goes HIGH when the EVSE is sleeping, and LOW otherwise
-//#define SLEEP_STATUS_REG &PINB
-//#define SLEEP_STATUS_IDX 4
-
-#ifdef AUTH_LOCK
-// AUTH_LOCK_REG/IDX - use an input pin to control AUTH_LOCK instead of
-// manual function calls
-// digital pin is configured as input with internal pull-up enabled
-// EVSE is locked when input HIGH and unlocked when input LOW
-//#define AUTH_LOCK_REG &PINC
-//#define AUTH_LOCK_IDX 2
-#endif // AUTH_LOCK
-
 
 
 // for stability testing - shorter timeout/higher retry count
@@ -348,6 +341,20 @@ extern AutoCurrentCapacityController g_ACCController;
 // enables RAPI $Z0 for tuning PWM (see rapi_proc.h for $Z0 syntax)
 // PWM parameters written to/loaded from EEPROM
 #define RELAY_HOLD_DELAY_TUNING // enable Z0
+
+#ifdef RELAY_ZC_SWITCH
+#define RELAY_CLOSE_ADVANCE_MS     20  // ms before voltage ZC to energize relay coil
+#define RELAY_OPEN_ADVANCE_MS       2  // ms before voltage ZC to de-energize relay coil
+#define ZC_DETECT_TIMEOUT_MS       35  // > one full AC cycle (50 Hz = 20 ms)
+#define AC_ZC_HALF_PERIOD_MS        8  // conservative half-period (works 50 & 60 Hz)
+#define CURRENT_ZERO_THRESHOLD_MA 100  // mA; current below this = safe to open relay (0.1 A)
+#endif // RELAY_ZC_SWITCH
+
+// OEV6 w/ CGMI - when power is loss, temporarily triggers NO GROUND fault
+// delay recording of NO GROUND fault to avoid recording this spurious fault
+#ifndef NO_GND_RECORD_DELAY
+#define NO_GND_RECORD_DELAY 0
+#endif
 
 //-- end features
 
@@ -425,7 +432,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // WARNING: ALL DELAYS *MUST* BE SHORTER THAN THIS TIMER OR WE WILL GET INTO
 // AN INFINITE RESET LOOP
-#define WATCHDOG_TIMEOUT WDTO_2S
+#define WATCHDOG_TIMEOUT_MS (WATCHDOG_TIMEOUT_SEC * 1000UL)
 
 #define LCD_MAX_CHARS_PER_LINE 16
 
@@ -460,72 +467,6 @@ extern AutoCurrentCapacityController g_ACCController;
 
 //J1772EVSEController
 
-#define CURRENT_PIN 0 // analog current reading pin ADCx
-#define PILOT_PIN 1 // analog pilot voltage reading pin ADCx
-#define PP_PIN 2 // PP_READ - ADC2
-#ifdef VOLTMETER
-// N.B. Note, ADC2 is already used as PP_PIN so beware of potential clashes
-// voltmeter pin is ADC2 on OPENEVSE_2
-#define VOLTMETER_PIN 2 // analog AC Line voltage voltmeter pin ADCx
-#endif // VOLTMETER
-#ifdef OPENEVSE_2
-// This pin must match the last write to CHARGING_PIN, modulo a delay. If
-// it is low when CHARGING_PIN is high, that's a missing ground.
-// If it's high when CHARGING_PIN is low, that's a stuck relay.
-// Auto L1/L2 is done with the voltmeter.
-#define ACLINE1_REG &PIND // OpenEVSE II has only one AC test pin.
-#define ACLINE1_IDX 3
-
-#define CHARGING_REG &PIND // OpenEVSE II has just one relay pin.
-#define CHARGING_IDX 7 // OpenEVSE II has just one relay pin.
-#else // !OPENEVSE_2
-
- // TEST PIN 1 for L1/L2, ground and stuck relay
-#define ACLINE1_REG &PIND
-#define ACLINE1_IDX 3
- // TEST PIN 2 for L1/L2, ground and stuck relay
-#define ACLINE2_REG &PIND
-#define ACLINE2_IDX 4
-
-#define V6_CHARGING_PIN  5
-#define V6_CHARGING_PIN2 6
-
-// digital Relay trigger pin
-#define CHARGING_REG &PINB
-#define CHARGING_IDX 0
-// digital Relay trigger pin for second relay
-#define CHARGING2_REG &PIND
-#define CHARGING2_IDX 7
-//digital Charging pin for AC relay
-#define CHARGINGAC_REG &PINB
-#define CHARGINGAC_IDX 1
-
-// obsolete LED pin
-//#define RED_LED_REG &PIND
-//#define RED_LED_IDX 5
-// obsolete LED pin
-//#define GREEN_LED_REG &PINB
-//#define GREEN_LED_IDX 5
-#endif // OPENEVSE_2
-
-// N.B. if PAFC_PWM is enabled, then pilot pin can be PB1 or PB2
-// if using fast PWM (PAFC_PWM disabled) pilot pin *MUST* be PB2
-#define PILOT_REG &PINB
-#define PILOT_IDX 2
-
-#ifdef MENNEKES_LOCK
-// requires external 12V H-bridge driver such as Polulu 1451
-
-//D11 - MOSI
-#define MENNEKES_LOCK_PINA_REG &PINB
-#define MENNEKES_LOCK_PINA_IDX 3
-
-//D12 - MISO
-#define MENNEKES_LOCK_PINB_REG &PINB
-#define MENNEKES_LOCK_PINB_IDX 4
-#include "MennekesLock.h"
-#endif // MENNEKES_LOCK
-
 
 
 
@@ -555,8 +496,8 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #define EOFS_VOLT_OFFSET 20 // 4 bytes
 #define EOFS_VOLT_SCALE_FACTOR 24 // 2 bytes
-#define EOFS_THRESH_AMBIENT 26 // 2 bytes
-#define EOFS_THRESH_IR 28 // 2 bytes
+#define EOFS_PANIC_TEMP 26 // 2 bytes
+//notused#define EOFS_THRESH_IR 28 // 2 bytes
 
 // for I2C RAPI
 #define EOFS_LOCAL_I2C_ADDR 30 // 1 byte
@@ -578,6 +519,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #define EOFS_RELAY_CLOSE_MS 37 // 1 byte
 #define EOFS_RELAY_HOLD_PWM 38 // 1 byte
+#define EOFS_RELAY_FLAGS    39 // 1 byte - relay enable/disable bitmask (ERELAYF_xxx)
 
 #define EOFS_MAX_HW_CURRENT_CAPACITY 511 // 1 byte
 
@@ -600,25 +542,8 @@ extern AutoCurrentCapacityController g_ACCController;
 #define AC_SAMPLE_MS 20 // 1 cycle @ 60Hz = 16.6667ms @ 50Hz = 20ms
 
 
-// V6 has PD7 tied to ground
-#define V6_ID_REG D
-#define V6_ID_IDX 7
-
 #ifdef GFI
-#define GFI_INTERRUPT 0 // interrupt number 0 = PD2, 1 = PD3
-// interrupt number 0 = PD2, 1 = PD3
-#define GFI_REG &PIND
-#define GFI_IDX 2
-
 #ifdef GFI_SELFTEST
-// pin is supposed to be wrapped around the GFI CT 5+ times
-#define GFITEST_REG &PIND
-#define GFITEST_IDX 6
-// V6 GFI test pin PB0
-#define V6_GFITEST_REG &PINB
-#define V6_GFITEST_IDX 0
-
-
 
 #define GFI_TEST_CYCLES 60
 // GFI pulse should be 50% duty cycle
@@ -663,62 +588,22 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // I2CLCD_PCF8574
 #endif // RGBLCD || I2CLCD
 
-// button sensing pin
-#define BTN_REG &PINC
-#define BTN_IDX 3
 #define BTN_PRESS_SHORT 50  // ms
 #define BTN_PRESS_LONG 500 // ms
 #define BTN_PRESS_VERYLONG 10000
 
 
-#ifdef RTC
+#ifdef HAVE_RTC
 // Default start/stop timers for un-initialized EEPROMs.
 // Makes it easy to compile in default time without need to set it up the first time.
 #define DEFAULT_START_HOUR    0x00 //Start time: 00:05
 #define DEFAULT_START_MIN     0x05
 #define DEFAULT_STOP_HOUR     0x06 //End time: 6:55
 #define DEFAULT_STOP_MIN      0x37
-#endif // RTC
+#endif // HAVE_RTC
 
-// for J1772.ReadPilot()
-// 1x = 114us 20x = 2.3ms 100x = 11.3ms
-#define PILOT_LOOP_CNT 100
 
 #ifdef AMMETER
-// This multiplier is the number of milliamps per A/d converter unit.
-
-// First, you need to select the burden resistor for the CT. You choose the largest value possible such that
-// the maximum peak-to-peak voltage for the current range is 5 volts. To obtain this value, divide the maximum
-// outlet current by the Te. That value is the maximum CT current RMS. You must convert that to P-P, so multiply
-// by 2*sqrt(2). Divide 5 by that value and select the next lower standard resistor value. For the reference
-// design, Te is 1018 and the outlet maximum is 30. 5/((30/1018)*2*sqrt(2)) = 59.995, so a 56 ohm resistor
-// is called for. Call this value Rb (burden resistor).
-
-// Next, one must use Te and Rb to determine the volts-per-amp value. Note that the readCurrent()
-// method calculates the RMS value before the scaling factor, so RMS need not be taken into account.
-// (1 / Te) * Rb = Rb / Te = Volts per Amp. For the reference design, that's 55.009 mV.
-// Each count of the A/d converter is 4.882 mV (5/1024). V/A divided by V/unit is unit/A. For the reference
-// design, that's 11.26. But we want milliamps per unit, so divide that into 1000 to get 88.7625558. Round near...
-//#define DEFAULT_CURRENT_SCALE_FACTOR 106 // for RB = 47 - recommended for 30A max
-//#define DEFAULT_CURRENT_SCALE_FACTOR 184 // for RB = 27 - recommended for 50A max
-// Craig K, I arrived at 213 by scaling my previous multiplier of 225 down by the ratio of my panel meter reading of 28 with the OpenEVSE uncalibrated reading of 29.6
-// then upped the scale factor to 220 after fixing the zero offset by subtracing 900ma
-//#define DEFAULT_CURRENT_SCALE_FACTOR 220 // for RB = 22 - measured by Craig on his new OpenEVSE V3
-// NOTE: setting DEFAULT_CURRENT_SCALE_FACTOR TO 0 will disable the ammeter
-// until it is overridden via RAPI
-//#define DEFAULT_CURRENT_SCALE_FACTOR 220   // Craig K, average of three OpenEVSE controller calibrations
-#ifdef OPENEVSE_2
-#define DEFAULT_CURRENT_SCALE_FACTOR 186   // OpenEVSE II with a 27 Ohm burden resistor, after a 2-point calibration at 12.5A and 50A
-#else
-#define DEFAULT_CURRENT_SCALE_FACTOR 220   // OpenEVSE v2.5 and v3 with a 22 Ohm burden resistor (note that the schematic may say 28 Ohms by mistake)
-#endif
-
-// subtract this from ammeter current reading to correct zero offset
-#ifdef OPENEVSE_2
-#define DEFAULT_AMMETER_CURRENT_OFFSET 230 // OpenEVSE II with a 27 Ohm burden resistor, after a 2-point calibration at 12.5A and 50A
-#else
-#define DEFAULT_AMMETER_CURRENT_OFFSET 0   // OpenEVSE v2.5 and v3 with a 22 Ohm burden resistor.  Could use a more thorough calibration exercise to nails this down.
-#endif
 
 // The maximum number of milliseconds to sample an ammeter pin in order to find three zero-crossings.
 // one and a half cycles at 50 Hz is 30 ms.
@@ -827,14 +712,6 @@ typedef union union4b {
 
 
 //-- begin class definitions
-
-#ifdef WATCHDOG
-#define WDT_RESET() wdt_reset() // pat the dog
-#define WDT_ENABLE() wdt_enable(WATCHDOG_TIMEOUT)
-#else
-#define WDT_RESET()
-#define WDT_ENABLE()
-#endif // WATCHDOG
 
 // OnboardDisplay.m_bFlags
 #define OBDF_MONO_BACKLIGHT 0x01
@@ -973,9 +850,13 @@ public:
 #endif // GFI
 
 #ifdef TEMPERATURE_MONITORING
-#include "./MCP9808.h"  //  adding the ambient temp sensor to I2C
-#include "./Adafruit_TMP007.h"   //  adding the TMP007 IR I2C sensor
 
+#ifdef MCP9808_IS_ON_I2C
+#include "MCP9808.h"  //  adding the ambient temp sensor to I2C
+#endif 
+#ifdef TMP007_IS_ON_I2C
+#include "./Adafruit_TMP007.h"   //  adding the TMP007 IR I2C sensor
+#endif 
 
 #define TEMPERATURE_NOT_INSTALLED -2560 // fake temp to return when hardware not installed
 #define TEMPMONITOR_UPDATE_INTERVAL 1000ul
@@ -998,6 +879,7 @@ public:
   int16_t m_MCP9808_temperature;  // 230 means 23.0C  Using an integer to save on floating point library use
   int16_t m_DS3231_temperature;   // the DS3231 RTC has a built in temperature sensor
   int16_t m_TMP007_temperature;
+  int16_t m_panicTemperature;
 
   TempMonitor() {}
   void Init();
@@ -1013,6 +895,11 @@ public:
     else m_Flags &= ~TMF_OVERTEMPERATURE;
   }
   int8_t OverTemperature() { return (m_Flags & TMF_OVERTEMPERATURE) ? 1 : 0; }
+  int16_t GetPanicTemperature() { return m_panicTemperature; }
+  void SetPanicTemperature(int16_t panictemp) {
+    m_panicTemperature = panictemp;
+    eeprom_write_word((uint16_t*)EOFS_PANIC_TEMP, panictemp);
+ }
   void SetOverTemperatureShutdown(int8_t tf) {
     if (tf) m_Flags |= (TMF_OVERTEMPERATURE_SHUTDOWN|TMF_OVERTEMPERATURE_LOGGED);
     else m_Flags &= ~TMF_OVERTEMPERATURE_SHUTDOWN;
@@ -1420,7 +1307,6 @@ extern TempMonitor g_TempMonitor;
 
 char *GetFirmwareVersion(char *str);
 void wdt_delay(uint32_t ms);
-
 
 #include "strings.h"
 #include "rapi_proc.h"

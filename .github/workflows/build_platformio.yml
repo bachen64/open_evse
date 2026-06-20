@@ -12,30 +12,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - env: openevse_1-8-3
+          - env: m328p_core
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse_latest
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: m328p_LCD_WIFI
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: m328p_noWiFi
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse_eu
+            platformio: 6.1.5
+            arch: avr
+            artifact: firmware.hex
+          - env: samd
             python: 3.x
-            platformio: 6.1.5 
-          - env: openevse_v6
-            python: 3.x
-            platformio: 6.1.5 
-          - env: emonevse
-            python: 3.x
-            platformio: 6.1.5 
+            platformio: 6.1.5
+            arch: samd
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v5
 
     - name: Cache pip
-      uses: actions/cache@v2
+      uses: actions/cache@v5
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-${{ matrix.env }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -43,13 +44,13 @@ jobs:
           ${{ runner.os }}-${{ matrix.env }}-pip-
 
     - name: Cache PlatformIO
-      uses: actions/cache@v2
+      uses: actions/cache@v5
       with:
         path: ~/.platformio
         key: ${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('**/lockfiles') }}
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v6
       with:
         python-version: '${{ matrix.python }}'
 
@@ -61,7 +62,8 @@ jobs:
     - name: Run PlatformIO
       run: pio run -e ${{ matrix.env }}
 
-    - name: Get compiler and output info
+    - name: Get compiler and output info (AVR)
+      if: matrix.arch == 'avr'
       run: |
         NAME=${{ matrix.env }}
         BUILT_TOOL="Platform IO"
@@ -72,10 +74,38 @@ jobs:
 
         source ci/info_common.sh info.json
 
-    - name: Upload output to GitHub
-      uses: actions/upload-artifact@v4
+    - name: Get build info (SAMD)
+      if: matrix.arch == 'samd'
+      run: |
+        BIN_SIZE=$(ls -l .pio/build/${{ matrix.env }}/firmware.bin | awk '{ print $5 }')
+        UF2_SIZE=$(ls -l .pio/build/${{ matrix.env }}/firmware.uf2 | awk '{ print $5 }')
+        cat <<EOF >info.json
+        {
+          "name": "${{ matrix.env }}",
+          "built_tool": "Platform IO",
+          "arch": "samd",
+          "bin_size": $BIN_SIZE,
+          "uf2_size": $UF2_SIZE
+        }
+        EOF
+
+    - name: Upload output to GitHub (AVR)
+      if: matrix.arch == 'avr'
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.env }}
         path: |
-          .pio/build/${{ matrix.env }}/firmware.hex
+          .pio/build/${{ matrix.env }}/${{ matrix.artifact }}
+          info.json
+
+    - name: Upload output to GitHub (SAMD)
+      if: matrix.arch == 'samd'
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ matrix.env }}
+        if-no-files-found: warn
+        path: |
+          .pio/build/${{ matrix.env }}/firmware.bin
+          .pio/build/${{ matrix.env }}/firmware.uf2
+          .pio/build/${{ matrix.env }}/bootloader-*.bin
           info.json

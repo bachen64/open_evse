@@ -38,7 +38,10 @@
 //reserved #define EVSE_STATE_PILOT_ERROR 0x0C // pilot self test error
 //reserved #define EVSE_STATE_TEMP_SENSOR_FAULT 0x0D // temp sensor dead
 #define EVSE_STATE_RELAY_CLOSURE_FAULT 0x0E
-#define EVSE_FAULT_STATE_END EVSE_STATE_RELAY_CLOSURE_FAULT
+#define EVSE_STATE_PP_SHORTED 0x0F // PP pin shorted
+#define EVSE_STATE_PP_MISSING 0x10 // PP resistor missing
+#define EVSE_STATE_EEPROM_FAILURE 0x11 // SAMD only
+#define EVSE_FAULT_STATE_END EVSE_STATE_EEPROM_FAILURE
            
 #define EVSE_STATE_SLEEPING 0xfe // waiting for timer
 #define EVSE_STATE_DISABLED 0xff // disabled
@@ -77,15 +80,23 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 #define ECF_GND_CHK_DISABLED   0x0008 // no chk for ground fault
 #define ECF_STUCK_RELAY_CHK_DISABLED 0x0010 // no chk for stuck relay
 #define ECF_AUTO_SVC_LEVEL_DISABLED  0x0020 // auto detect svc level - requires ADVPWR
-// Ability set the EVSE for manual button press to start charging - GoldServe
-#define ECF_AUTO_START_DISABLED 0x0040  // no auto start charging
+#define ECF_PP_AUTO_AMPACITY 0x0040  // PP autoampacity enabled
 #define ECF_SERIAL_DBG         0x0080 // enable debugging messages via serial
 #define ECF_MONO_LCD           0x0100 // monochrome LCD backlight
 #define ECF_GFI_TEST_DISABLED  0x0200 // no GFI self test
 #define ECF_TEMP_CHK_DISABLED  0x0400 // no Temperature Monitoring
 #define ECF_CGMI               0x1000 // continuous GMI
+#define ECF_BOOT_LOCK_DISABLED 0x2000 // boot lock
+#define ECF_OVERCURRENT_DISABLED 0x0400 // disable overcurrent check
 #define ECF_BUTTON_DISABLED    0x8000 // front panel button disabled
+#define ECF_RELAY_ZC_DISABLED  0x0800 // disable zero-crossing relay switching
 #define ECF_DEFAULT            0x0000
+
+// relay enable/disable flags - saved to EEPROM at EOFS_RELAY_FLAGS
+#define ERELAYF_DC1_DISABLED 0x01 // DC relay 1 disabled
+#define ERELAYF_DC2_DISABLED 0x02 // DC relay 2 disabled
+#define ERELAYF_AC_DISABLED  0x04 // AC relay disabled
+#define ERELAYF_DEFAULT      0x00 // all relays enabled
 
 // J1772EVSEController volatile m_wVFlags bits - not saved to EEPROM
 #define ECVF_AUTOSVCLVL_SKIPPED 0x0001 // auto svc level test skipped during post
@@ -145,6 +156,9 @@ class J1772EVSEController {
 #ifdef VOLTMETER_PIN
   AdcPin adcVoltMeter;
 #endif
+#if defined(RELAY_ZC_SWITCH) && defined(TARGET_SAMD)
+  AdcPin adcGmi;  // GMI_LINE (PA09) analog signal for voltage ZC detection
+#endif
 
 #ifdef CHARGING_REG
   DigitalPin pinCharging;
@@ -178,6 +192,10 @@ class J1772EVSEController {
   uint8_t m_relayCloseMs; // #ms for DC pulse to close relay
   uint8_t m_relayHoldPwm; // PWM duty cycle to hold relay closed
 #endif // RELAY_PWM
+  uint8_t m_relayFlags; // ERELAYF_xxx - relay enable/disable bitmask
+#ifdef RELAY_ZC_SWITCH
+  uint16_t m_AcFreqX100; // measured AC frequency × 100 (e.g. 6012 = 60.12 Hz); 0 = not yet measured
+#endif
   uint16_t m_wFlags; // ECF_xxx
   uint16_t m_wVFlags; // ECVF_xxx
   static THRESH_DATA m_ThreshData;
@@ -204,9 +222,6 @@ class J1772EVSEController {
 #ifdef OVERCURRENT_THRESHOLD
   unsigned long m_OverCurrentStartMs;
 #endif // OVERCURRENT_THRESHOLD
-#ifdef OEV6
-  uint8_t m_isV6;
-#endif
 
 
   void setFlags(uint16_t flags) { 
@@ -232,7 +247,7 @@ class J1772EVSEController {
   }
 
 #ifdef OEV6
-  uint8_t isV6() { return m_isV6; }
+  uint8_t isV6() { return g_isV6; }
 #endif
 
 #ifdef ADVPWR
@@ -252,7 +267,14 @@ class J1772EVSEController {
   uint8_t doPost();
 #endif // ADVPWR
   void chargingOn();
-  void chargingOff();
+  void chargingOff(uint8_t emergency = 0);
+#ifdef RELAY_ZC_SWITCH
+  void zcWaitRelay(uint8_t advanceMs);
+  void zcWaitRelayClose();
+  void zcWaitRelayOpen();
+  void waitCurrentZero();
+  uint32_t measureAcFreq(unsigned long *zcTimeMsOut);
+#endif
   uint8_t chargingIsOn() { return vFlagIsSet(ECVF_CHARGING_ON); }
 
 #ifdef TIME_LIMIT
@@ -263,8 +285,8 @@ class J1772EVSEController {
 #ifdef AMMETER
   unsigned long m_AmmeterReading;
   int32_t m_ChargingCurrent;
-  int16_t m_AmmeterCurrentOffset;
-  int16_t m_CurrentScaleFactor;
+  int32_t m_AmmeterCurrentOffset;
+  int32_t m_CurrentScaleFactor;
 #ifdef CHARGE_LIMIT
   uint8_t m_chargeLimitkWh; // kWh to extend session
   uint32_t m_chargeLimitTotWs; // total Ws limit
@@ -299,6 +321,9 @@ public:
   uint8_t GetState() { 
     return m_EvseState; 
   }
+  void SetState(uint8_t state) {
+    m_EvseState = state;
+  }
   uint8_t GetPrevState() { 
     return m_PrevEvseState; 
   }
@@ -321,10 +346,49 @@ public:
   }
 #endif // RELAY_PWM
 
+  uint8_t GetRelayFlags() { return m_relayFlags; }
+  void SetRelayFlags(uint8_t flags) {
+    m_relayFlags = flags;
+    eeprom_write_byte((uint8_t*)EOFS_RELAY_FLAGS, m_relayFlags);
+  }
+  uint8_t RelayDC1Enabled() { return !(m_relayFlags & ERELAYF_DC1_DISABLED); }
+  uint8_t RelayDC2Enabled() { return !(m_relayFlags & ERELAYF_DC2_DISABLED); }
+  uint8_t RelayACEnabled()  { return !(m_relayFlags & ERELAYF_AC_DISABLED); }
+
   void SetHardFault() { setVFlags(ECVF_HARD_FAULT); }
   void ClrHardFault() { clrVFlags(ECVF_HARD_FAULT); }
   int8_t InHardFault() { return vFlagIsSet(ECVF_HARD_FAULT); }
-  int8_t CGMIisEnabled() { return flagIsSet(ECF_CGMI); }
+  int8_t hasCGMI() { return flagIsSet(ECF_CGMI); }
+#ifdef RELAY_ZC_SWITCH
+  uint8_t RelayZCSwitchEnabled() { return !flagIsSet(ECF_RELAY_ZC_DISABLED); }
+  void EnableRelayZCSwitch(uint8_t tf) {
+    if (!tf) setFlags(ECF_RELAY_ZC_DISABLED);
+    else clrFlags(ECF_RELAY_ZC_DISABLED);
+    SaveEvseFlags();
+  }
+  uint16_t GetAcFreqX100() { return m_AcFreqX100; }
+#endif // RELAY_ZC_SWITCH
+  int8_t BootLockIsEnabled() { return !flagIsSet(ECF_BOOT_LOCK_DISABLED); }
+  void EnableBootLock(uint8_t tf) {
+    if (!tf) setFlags(ECF_BOOT_LOCK_DISABLED); 
+    else clrFlags(ECF_BOOT_LOCK_DISABLED);
+    SaveEvseFlags();
+  }
+  int8_t OverCurrentCheckIsEnabled() { return !flagIsSet(ECF_OVERCURRENT_DISABLED); }
+  void EnableOverCurrentCheck(uint8_t tf) {
+    if (!tf) setFlags(ECF_OVERCURRENT_DISABLED); 
+    else clrFlags(ECF_OVERCURRENT_DISABLED);
+    SaveEvseFlags();
+  }
+  #ifdef PP_AUTO_AMPACITY
+  int8_t PPAutoAmpacityIsEnabled() { return flagIsSet(ECF_PP_AUTO_AMPACITY); }
+  void EnablePPAutoAmpacity(uint8_t tf) {
+    if (tf) setFlags(ECF_PP_AUTO_AMPACITY); 
+    else clrFlags(ECF_PP_AUTO_AMPACITY);
+    SaveEvseFlags();
+    g_ACCController.Enable(tf);
+  }
+  #endif // PP_AUTO_AMPACITY
   unsigned long GetResetMs();
 
   uint8_t SetMaxHwCurrentCapacity(uint8_t amps);
@@ -394,7 +458,8 @@ public:
   }
   uint8_t IsBootLocked() {
 #ifdef BOOTLOCK
-    return vFlagIsSet(ECVF_BOOT_LOCK) ? 1 : 0;
+    if (flagIsSet(ECF_BOOT_LOCK_DISABLED)) return 0;
+    return vFlagIsSet(ECVF_BOOT_LOCK);
 #else
     return 0;
 #endif
@@ -473,13 +538,13 @@ int GetHearbeatTrigger();
 
   int16_t GetAmmeterCurrentOffset() { return m_AmmeterCurrentOffset; }
   int16_t GetCurrentScaleFactor() { return m_CurrentScaleFactor; }
-  void SetAmmeterCurrentOffset(int16_t offset) {
+  void SetAmmeterCurrentOffset(int32_t offset) {
     m_AmmeterCurrentOffset = offset;
-    eeprom_write_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET,offset);
+    eeprom_write_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET,((int16_t)offset));
   }
-  void SetCurrentScaleFactor(int16_t scale) {
+  void SetCurrentScaleFactor(int32_t scale) {
     m_CurrentScaleFactor = scale;
-    eeprom_write_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR,scale);
+    eeprom_write_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR,((int16_t)scale));
   }
 #ifdef ECVF_AMMETER_CAL
   uint8_t AmmeterCalEnabled() { 
@@ -568,6 +633,7 @@ int GetHearbeatTrigger();
   }
   void SetInMenu() { setVFlags(ECVF_UI_IN_MENU); }
   void ClrInMenu() { clrVFlags(ECVF_UI_IN_MENU); }
+  int8_t IsInMenu() { return vFlagIsSet(ECVF_UI_IN_MENU); }
   void SetDelayTimerOnFlag() {setVFlags(ECVF_TIMER_ON); }
   void ClrDelayTimerOnFlag() {clrVFlags(ECVF_TIMER_ON); }
 #ifdef BTN_MENU
@@ -576,7 +642,7 @@ int GetHearbeatTrigger();
     else clrFlags(ECF_BUTTON_DISABLED);
     SaveEvseFlags();
   }
-  uint8_t ButtonIsEnabled() { return flagIsSet(ECF_BUTTON_DISABLED) ? 0 : 1; }
+  uint8_t ButtonIsEnabled() { return !flagIsSet(ECF_BUTTON_DISABLED); }
 #endif // BTN_MENU
 
 #if defined(KWH_RECORDING) && !defined(VOLTMETER)
@@ -591,6 +657,18 @@ int GetHearbeatTrigger();
   void LockMennekes() { m_MennekesLock.Lock(1); }
   void UnlockMennekes() { m_MennekesLock.Unlock(1); }
 #endif // MENNEKES_LOCK
+  void ResetFaultCounters() {
+    m_GfiTripCnt = 0xff;
+    m_NoGndTripCnt = 0xff;
+    m_StuckRelayTripCnt = 0xff;
+
+    eeprom_write_byte((uint8_t*)EOFS_GFI_TRIP_CNT,0xff);
+    eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,0xff);
+    eeprom_write_byte((uint8_t*)EOFS_STUCK_RELAY_TRIP_CNT,0xff);
+  }
+#ifdef PP_AUTO_AMPACITY
+  void DoPPError(bool shorted);
+#endif // PP_AUTO_AMPACITY
 
 };
 

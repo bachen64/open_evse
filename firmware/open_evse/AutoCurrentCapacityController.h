@@ -13,7 +13,10 @@
 // See LICENSE for a copy of the GNU General Public License or see
 // it online at <http://www.gnu.org/licenses/>.
 
-#include "avrstuff.h"
+#include "open_evse.h"
+
+// fake value denoting no resistor present
+#define PP_AMPS_ABSENT 0xFF
 
 typedef struct pp_amps {
   uint16_t adcVal;
@@ -23,12 +26,15 @@ typedef struct pp_amps {
 class AutoCurrentCapacityController {
   AdcPin adcPP;
   uint8_t ppMaxAmps;
+  bool enabled;
 
 public:
   AutoCurrentCapacityController();
   uint8_t GetPPMaxAmps() { return ppMaxAmps; }
   uint8_t ReadPPMaxAmps();
   uint8_t AutoSetCurrentCapacity();
+  bool IsEnabled() { return enabled; }
+  void Enable(bool tf) { enabled = tf; }
 };
 
 

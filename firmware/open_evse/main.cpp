@@ -41,25 +41,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#include <avr/io.h>
-#include <avr/eeprom.h>
-#include <avr/wdt.h>
-#include <avr/pgmspace.h>
-#include <pins_arduino.h>
-#include "./Wire.h"
-#include "./RTClib.h"
 #include "open_evse.h"
-
-// if using I2CLCD_PCF8574 uncomment below line  and comment out LiquidTWI2.h above
-//#include "./LiquidCrystal_I2C.h"
-#ifdef TEMPERATURE_MONITORING
-  #ifdef MCP9808_IS_ON_I2C
-  #include "MCP9808.h"  //  adding the ambient temp sensor to I2C
-  #endif 
-  #ifdef TMP007_IS_ON_I2C
-  #include "./Adafruit_TMP007.h"   //  adding the TMP007 IR I2C sensor
-  #endif 
-#endif // TEMPERATURE_MONITORING
 
 
 #ifdef BTN_MENU
@@ -126,7 +108,9 @@ Menu *g_SettingsMenuList[] = {
 Menu *g_SetupMenuList[] = {
 #ifdef NOSETUP_MENU
   &g_MaxCurrentMenu,
+#ifdef HAVE_RTC
   &g_RTCMenu,
+#endif
 #else // !NOSETUP_MENU
 #ifdef DELAYTIMER_MENU
   &g_RTCMenu,
@@ -158,12 +142,20 @@ BtnHandler g_BtnHandler;
 
 //-- begin global variables
 
+
+#ifdef OEV6
+// set by autodetection code in target.cpp initTarget()
+bool g_isV6 = false;
+#endif // OEV6
+bool g_hasCGMI = false;
+
+
 char g_sTmp[TMP_BUF_SIZE];
 
 OnboardDisplay g_OBD;
 
 // Instantiate RTC and Delay Timer - GoldServe
-#ifdef RTC
+#ifdef HAVE_RTC
 RTC_DS1307 g_RTC;
 
 #if defined(RAPI)
@@ -175,7 +167,7 @@ void GetRTC(char *buf) {
   sprintf(buf,"%d %d %d %d %d %d",t.year()-2000,t.month(),t.day(),t.hour(),t.minute(),t.second());
 }
 #endif // RAPI
-#endif // RTC
+#endif // HAVE_RTC
 #ifdef DELAYTIMER
 DelayTimer g_DelayTimer;
 #ifdef DELAYTIMER_MENU
@@ -203,17 +195,10 @@ AutoCurrentCapacityController g_ACCController;
 // *do not* call this before WDT_ENABLE() is called
 void wdt_delay(uint32_t ms)
 {
+  uint32_t startms = millis();
   do {
     WDT_RESET();
-    if (ms > WATCHDOG_TIMEOUT/2) {
-      delay(WATCHDOG_TIMEOUT/2);
-      ms -= WATCHDOG_TIMEOUT/2;
-    }
-    else {
-      delay(ms);
-      ms = 0;
-    }
-  } while(ms);
+  } while((millis()-startms) < ms);
 }
 
 static inline void wiresend(uint8_t x) {
@@ -249,18 +234,6 @@ char *u2a(unsigned long x,int8_t digits)
   return s;
 }
 
-// wdt_init turns off the watchdog timer after we use it
-// to reboot
-
-void wdt_init(void) __attribute__((naked,used)) __attribute__((section(".init3")));
-void wdt_init(void)
-{
-  MCUSR = 0;
-  wdt_disable();
-
-  return;
-}
-
 
 #ifdef TEMPERATURE_MONITORING
 
@@ -270,10 +243,8 @@ void TempMonitor::Init()
   m_MCP9808_temperature = TEMPERATURE_NOT_INSTALLED;  // 230 means 23.0C  Using an integer to save on floating point library use
   m_DS3231_temperature = TEMPERATURE_NOT_INSTALLED;   // the DS3231 RTC has a built in temperature sensor
   m_TMP007_temperature = TEMPERATURE_NOT_INSTALLED;
-
-#ifdef TEMPERATURE_MONITORING_NY
-  LoadThresh();
-#endif
+  m_panicTemperature = (int16_t) eeprom_read_word((uint16_t*)EOFS_PANIC_TEMP);
+  if (m_panicTemperature <= 0) m_panicTemperature = TEMPERATURE_AMBIENT_PANIC;
 
 #ifdef MCP9808_IS_ON_I2C
   m_tempSensor.begin();
@@ -296,7 +267,7 @@ void TempMonitor::Read()
 #endif
 
        
-#ifdef RTC
+#ifdef HAVE_RTC
 #ifdef OPENEVSE_2
     m_DS3231_temperature = TEMPERATURE_NOT_INSTALLED;  // OpenEVSE II does not use the DS3231
 #else // !OPENEVSE_2
@@ -327,7 +298,7 @@ void TempMonitor::Read()
       m_DS3231_temperature = TEMPERATURE_NOT_INSTALLED;
     
 #endif // OPENEVSE_2
-#endif // RTC
+#endif // HAVE_RTC
 
     m_LastUpdate = curms;
   }
@@ -692,13 +663,33 @@ void OnboardDisplay::Update(int8_t updmode)
 #endif
       break;
 #endif // OVERCURRENT_THRESHOLD   
+#ifdef PP_AUTO_AMPACITY
+    case EVSE_STATE_PP_SHORTED:
+      SetGreenLed(0);
+      SetRedLed(1);
+#ifdef LCD16X2 //Adafruit RGB LCD
+      LcdSetBacklightColor(RED);
+      LcdPrint_P(0,g_psCableFault);
+      LcdPrint_P(1,g_psPPShorted);
+#endif
+      break;
+    case EVSE_STATE_PP_MISSING:
+      SetGreenLed(0);
+      SetRedLed(1);
+#ifdef LCD16X2 //Adafruit RGB LCD
+      LcdSetBacklightColor(RED);
+      LcdPrint_P(0,g_psCableFault);
+      LcdPrint_P(1,g_psPPMissing);
+#endif
+      break;
+#endif // PP_AUTO_AMPACITY
     case EVSE_STATE_NO_GROUND:
       SetGreenLed(0);
       SetRedLed(1);
 #ifdef LCD16X2 //Adafruit RGB LCD
       LcdSetBacklightColor(RED);
       if (updmode == OBD_UPD_HARDFAULT) {
-        LcdMsg_P(g_EvseController.CGMIisEnabled() ? g_psSvcReq : g_psEvseError,g_psNoGround);
+        LcdMsg_P(g_EvseController.hasCGMI() ? g_psSvcReq : g_psEvseError,g_psNoGround);
       }
       else {
 	// 2nd line will be updated below with auto retry count
@@ -797,19 +788,21 @@ void OnboardDisplay::Update(int8_t updmode)
     if (!g_EvseController.InHardFault() &&
 	((curstate == EVSE_STATE_GFCI_FAULT) || (curstate == EVSE_STATE_NO_GROUND))) {
 #ifdef LCD16X2
-      strcpy(g_sTmp,g_sRetryIn);
-      int resetsec = (int)(g_EvseController.GetResetMs() / 1000ul);
-      if (resetsec >= 0) {
-	sprintf(g_sTmp+sizeof(g_sTmp)-6,g_sHHMMfmt,resetsec / 60,resetsec % 60);
-	strcat(g_sTmp,g_sTmp+sizeof(g_sTmp)-6);
-	LcdPrint(1,g_sTmp);
+      if (!g_EvseController.IsInMenu()) {
+        strcpy(g_sTmp,g_sRetryIn);
+        int resetsec = (int)(g_EvseController.GetResetMs() / 1000ul);
+        if (resetsec >= 0) {
+          sprintf(g_sTmp+sizeof(g_sTmp)-6,g_sHHMMfmt,resetsec / 60,resetsec % 60);
+          strcat(g_sTmp,g_sTmp+sizeof(g_sTmp)-6);
+          LcdPrint(1,g_sTmp);
+        }
       }
 #endif // LCD16X2
       return;
     }
 #endif // GFI
 
-#ifdef RTC
+#ifdef HAVE_RTC
     DateTime currentTime = g_RTC.now();
 #endif
 
@@ -881,7 +874,7 @@ void OnboardDisplay::Update(int8_t updmode)
 	}
 #endif
 
-#ifdef RTC	
+#ifdef HAVE_RTC	
 	if ( g_TempMonitor.m_DS3231_temperature != TEMPERATURE_NOT_INSTALLED) {
 	  sprintf(g_sTmp,tempfmt,g_TempMonitor.m_DS3231_temperature/10, abs(g_TempMonitor.m_DS3231_temperature % 10));      //  sensor built into the DS3231 RTC Chip
 	  LcdPrint(5,1,g_sTmp);
@@ -924,12 +917,12 @@ void OnboardDisplay::Update(int8_t updmode)
       int m = (elapsedTime % 3600) / 60;
       int s = elapsedTime % 60;
       sprintf(g_sTmp,"%02d:%02d:%02d",h,m,s);
-#ifdef RTC
+#ifdef HAVE_RTC
       g_sTmp[8]=' ';
       g_sTmp[9]=' ';
       g_sTmp[10]=' ';
       sprintf(g_sTmp+11,g_sHHMMfmt,currentTime.hour(),currentTime.minute());
-#endif //RTC
+#endif //HAVE_RTC
       LcdPrint(1,g_sTmp);
 #endif // KWH_RECORDING
 #ifdef TEMPERATURE_MONITORING
@@ -1764,8 +1757,8 @@ Menu *RTCMenuDay::Select()
 RTCMenuYear::RTCMenuYear()
 {
 }
-#define YEAR_MIN 23
-#define YEAR_MAX 33
+#define YEAR_MIN 26
+#define YEAR_MAX 36
 void RTCMenuYear::Init()
 {
   g_OBD.LcdPrint_P(0,g_psRTC_Year);
@@ -2411,12 +2404,14 @@ void DelayTimer::PrintTimerIcon(){
 void ProcessInputs()
 {
 #ifdef RAPI
+  WDT_RESET();
   RapiDoCmd();
 #endif
 #ifdef BTN_MENU
   g_BtnHandler.ChkBtn();
 #endif
 #ifdef TEMPERATURE_MONITORING
+  WDT_RESET();
   g_TempMonitor.Read();  //   update temperatures once per second
 #endif
 }
@@ -2425,20 +2420,29 @@ void ProcessInputs()
 void EvseReset()
 {
   Wire.begin();
+
   g_OBD.Init();
 
 #ifdef RAPI
   RapiInit();
 #endif
 
-  g_EvseController.Init();
 
+#ifdef TEMPERATURE_MONITORING
+  g_TempMonitor.Init();
+#endif
+
+  g_EvseController.Init();
 #ifdef DELAYTIMER
   g_DelayTimer.Init(); // this *must* run after g_EvseController.Init() because it sets one of the vFlags
 #endif  // DELAYTIMER
 
 #ifdef PP_AUTO_AMPACITY
-  g_ACCController.AutoSetCurrentCapacity();
+  g_ACCController.Enable(g_EvseController.PPAutoAmpacityIsEnabled());
+  Serial.println(g_ACCController.IsEnabled());
+  if (g_ACCController.AutoSetCurrentCapacity() == 1) {
+    g_EvseController.DoPPError(true); // shorted
+  }
 #endif
 }
 
@@ -2452,9 +2456,12 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
     // already debounces before requesting the state transition, so we can
     // be absolutely sure that the PP pin has firm contact by the time we
     // get here
-    if (g_ACCController.AutoSetCurrentCapacity()) {
-      // invalid PP so 0 amps - force to stay in State A
-      retEvseState = EVSE_STATE_A;
+    uint8_t ascret = g_ACCController.AutoSetCurrentCapacity();
+    if (ascret == 1) {
+      retEvseState = EVSE_STATE_PP_SHORTED;
+    }
+    else if (ascret == PP_AMPS_ABSENT) {
+      retEvseState = EVSE_STATE_PP_MISSING;
     }
   }
   /*  else { // EVSE_STATE_A
@@ -2473,11 +2480,15 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
 
 void setup()
 {
-  wdt_disable();
+  WDT_DISABLE();
   
   delay(400);  // give I2C devices time to be ready before running code that wants to initialize I2C devices.  Otherwise a hang can occur upon powerup.
   
-  Serial.begin(SERIAL_BAUD);
+  RAPI_SERIAL_PORT.begin(SERIAL_BAUD);
+
+  initTarget();
+
+  g_EnergyMeter.Init();
 
 #ifdef BTN_MENU
   g_BtnHandler.init();
@@ -2486,13 +2497,8 @@ void setup()
 #ifdef PP_AUTO_AMPACITY
   g_EvseController.SetStateTransitionReqFunc(&StateTransitionReqFunc);
 #endif //PP_AUTO_AMPACITY
-  EvseReset();
-  
-#ifdef TEMPERATURE_MONITORING
-  g_TempMonitor.Init();
-#endif
 
-  
+  EvseReset();
 
 #ifdef BOOTLOCK
 #ifdef LCD16X2

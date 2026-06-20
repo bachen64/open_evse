@@ -79,4 +79,8 @@
 #define STR_L1						     "L1"  
 #define STR_L2						     "L2"  
 #define STR_OVER_CURRENT "OVERCURRENT"
+#define STR_CABLE_FAULT "CABLE FAULT"
+#define STR_PP_SHORTED "PP SHORTED"
+#define STR_PP_MISSING "PP MISSING"
+
 //#endif

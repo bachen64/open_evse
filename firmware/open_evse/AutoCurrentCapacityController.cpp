@@ -16,6 +16,7 @@
 
 #ifdef PP_AUTO_AMPACITY
 
+#if (ADC_RESOLUTION_BITS == 10)
 static PP_AMPS s_ppAmps[] = {
   {0,0},
   {93,63},  // 100 = 93
@@ -24,18 +25,30 @@ static PP_AMPS s_ppAmps[] = {
   {615,13}, // 1.5K = 615
   {1023,0}
 };
+#elif (ADC_RESOLUTION_BITS == 12)
+static PP_AMPS s_ppAmps[] = {
+  {0,0},
+  {93*4,63},   // 100 = 93
+  {185*4,32},  // 220 = 185
+  {415*4,20},  // 680 = 415
+  {615*4,13},  // 1.5K = 615
+  {4095,0}
+};
+#endif
 
 AutoCurrentCapacityController::AutoCurrentCapacityController() :
-  adcPP(PP_PIN)
+  adcPP(PP_PIN),enabled(false)
 {
 }
 
 uint8_t AutoCurrentCapacityController::ReadPPMaxAmps()
 {
+  if (!enabled) return PP_AMPS_ABSENT;
+
   // n.b. should probably sample a few times and average it
   uint16_t adcval = adcPP.read();
 
-  uint8_t amps = 0;
+  uint8_t amps = PP_AMPS_ABSENT;
   for (uint8_t i=1;i < sizeof(s_ppAmps)/sizeof(s_ppAmps[0]);i++) {
     if (adcval <= (s_ppAmps[i].adcVal - (s_ppAmps[i].adcVal - s_ppAmps[i-1].adcVal)/2)) {
       amps = s_ppAmps[i-1].amps;
@@ -52,15 +65,22 @@ uint8_t AutoCurrentCapacityController::ReadPPMaxAmps()
 
 uint8_t AutoCurrentCapacityController::AutoSetCurrentCapacity()
 {
+  if (!enabled) return 0;
+
   uint8_t amps = ReadPPMaxAmps();
 
-  if (amps) {
+  if (amps == PP_AMPS_ABSENT) {
+    // open circuit - no cable present, charge at configured capacity
+    return PP_AMPS_ABSENT;
+  }
+  else if (amps) {
     if (g_EvseController.GetCurrentCapacity() > ppMaxAmps) {
       g_EvseController.SetCurrentCapacity(ppMaxAmps,1,1);
     }
     return 0;
   }
   else {
+    // ADC near zero - short on PP pin, block charging
     return 1;
   }
 }

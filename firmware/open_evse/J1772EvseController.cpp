@@ -26,9 +26,6 @@ long g_CycleHalfStart;
 uint8_t g_CycleState;
 #endif
 
-//                                               A/B B/C C/D D DS
-THRESH_DATA J1772EVSEController::m_ThreshData = {875,780,690,0,260};
-
 J1772EVSEController g_EvseController;
 
 #ifdef AMMETER
@@ -59,6 +56,9 @@ void J1772EVSEController::readAmmeter()
 {
   WDT_RESET();
 
+#ifdef AMMETER_TEST
+  uint32_t max = 0;
+#endif
   unsigned long sum = 0;
   uint8_t zero_crossings = 0;
   unsigned long last_zero_crossing_time = 0, now_ms;
@@ -66,11 +66,13 @@ void J1772EVSEController::readAmmeter()
   uint16_t last_sample;
   unsigned int sample_count = 0;
   for(unsigned long start = millis(); ((now_ms = millis()) - start) < CURRENT_SAMPLE_INTERVAL; ) {
-    // the A/d is 0 to 1023.
     uint16_t sample = adcCurrent.read();
+#ifdef AMMETER_TEST
+    if (max < sample) max = sample;
+#endif
     // If this isn't the first sample, and if the sign of the value differs from the
     // sign of the previous value, then count that as a zero crossing.
-    if (!is_first_sample && ((last_sample > 512) != (sample > 512))) {
+    if (!is_first_sample && ((last_sample > ADC_HALF) != (sample > ADC_HALF))) {
       // Once we've seen a zero crossing, don't look for one for a little bit.
       // It's possible that a little noise near zero could cause a two-sample
       // inversion.
@@ -87,7 +89,7 @@ void J1772EVSEController::readAmmeter()
     case 1:
     case 2:
       // Gather the sum-of-the-squares and count how many samples we've collected.
-      sum += (unsigned long)(((long)sample - 512) * ((long)sample - 512));
+      sum += (unsigned long)(((long)sample - ADC_HALF) * ((long)sample - ADC_HALF));
       sample_count++;
       continue;
     case 3:
@@ -95,6 +97,14 @@ void J1772EVSEController::readAmmeter()
       // But additionally, that value must be scaled to a real current value.
       // we will do that elsewhere
       m_AmmeterReading = ulong_sqrt(sum / sample_count);
+#ifdef AMMETER_TEST
+      {
+        char s[80];
+        long instantma = m_AmmeterReading*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+        sprintf(s,"%u %u %d",max,m_AmmeterReading,instantma);
+        RAPI_SERIAL_PORT.println(s);
+      }
+#endif
       return;
     }
   }
@@ -103,6 +113,136 @@ void J1772EVSEController::readAmmeter()
 
   WDT_RESET();
 }
+
+#ifdef RELAY_ZC_SWITCH
+// Block until AC current amplitude drops below CURRENT_ZERO_THRESHOLD_MA (0.1 A).
+// Polls readAmmeter() indefinitely. WDT_RESET() called each iteration.
+// Emergency opens (chargingOff(1)) bypass this entirely.
+void J1772EVSEController::waitCurrentZero()
+{
+  do {
+    WDT_RESET();
+    readAmmeter();
+    int32_t ma = (int32_t)m_AmmeterReading * m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+    if (ma < (int32_t)CURRENT_ZERO_THRESHOLD_MA) return;
+  } while (1);
+}
+
+// Measure AC frequency.  Stores the result (×100) in m_AcFreqX100 and sets
+// *zcTimeMsOut to the millis() timestamp of the second detected crossing.
+// Returns the half-period in µs, or 0 (with *zcTimeMsOut = 0) on failure.
+//
+// Detection method depends on hardware:
+//   SAMD:        ADC sign-change on GMI_LINE (adcGmi, PA09).
+//   m328p CGMI:  digital off-period pulses on pinAC2 — HIGH = near voltage ZC.
+//   m328p non-CGMI: each AC channel drives one diode half-wave (pinAC1 and
+//                pinAC2).  Rising edges alternate between channels every
+//                half-period; threshold offset cancels because both diodes
+//                have the same forward drop.
+uint32_t J1772EVSEController::measureAcFreq(unsigned long *zcTimeMsOut)
+{
+  *zcTimeMsOut = 0;
+  uint32_t zcUs[2] = {0, 0};
+  uint8_t count = 0;
+
+#if defined(TARGET_SAMD)
+  // ADC sign-change detection on GMI_LINE
+  uint8_t isFirst = 1;
+  uint16_t lastSample = 0;
+  for (uint32_t start = micros(); (micros() - start) < (ZC_DETECT_TIMEOUT_MS * 3000UL); ) {
+    uint16_t sample = (uint16_t)adcGmi.read();
+    if (!isFirst && ((lastSample > ADC_HALF) != (sample > ADC_HALF))) {
+      uint32_t now_us = micros();
+      // debounce: require at least 4 ms between accepted crossings
+      if (!count || (now_us - zcUs[0]) > 4000UL) {
+        zcUs[count++] = now_us;
+        if (count == 2) break;
+      }
+    }
+    isFirst = 0;
+    lastSample = sample;
+  }
+#else
+  if (hasCGMI()) {
+    // m328p CGMI: digital off-period pulses on pinAC2.
+    // Pin HIGH = AC voltage below detection threshold = near zero crossing.
+    // Use midpoint of each HIGH pulse as the ZC timestamp.
+    uint8_t inHigh = 0;
+    uint32_t risingUs = 0;
+    for (uint32_t start = micros(); (micros() - start) < (ZC_DETECT_TIMEOUT_MS * 3000UL); ) {
+      uint8_t pinState = pinAC2.read();
+      if (!inHigh && pinState) {
+        risingUs = micros();
+        inHigh = 1;
+      } else if (inHigh && !pinState) {
+        zcUs[count++] = risingUs + (micros() - risingUs) / 2;
+        inHigh = 0;
+        if (count == 2) break;
+      }
+    }
+  }
+#if defined(ACLINE1_REG) && defined(ACLINE2_REG)
+  else {
+    // Non-CGMI m328p: pinAC1 and pinAC2 are complementary diode half-wave
+    // channels — each is LOW for a full half-cycle (its non-conducting half).
+    // A rising edge on either channel marks the start of its half-cycle, which
+    // is a proxy for the zero crossing.  Alternating rising edges on opposite
+    // channels are one half-period apart; the diode threshold offset is the
+    // same on both channels so it cancels out in the interval measurement.
+    uint8_t lastAC1 = pinAC1.read(), lastAC2 = pinAC2.read();
+    uint8_t lastEdgePin = 0; // 1 = AC1, 2 = AC2
+    for (uint32_t start = micros(); (micros() - start) < (ZC_DETECT_TIMEOUT_MS * 3000UL); ) {
+      uint8_t ac1 = pinAC1.read(), ac2 = pinAC2.read();
+      uint8_t edgePin = 0;
+      if (!lastAC1 && ac1) edgePin = 1;
+      else if (!lastAC2 && ac2) edgePin = 2;
+      if (edgePin && edgePin != lastEdgePin) {
+        uint32_t now_us = micros();
+        if (!count || (now_us - zcUs[count - 1]) > 4000UL) {
+          zcUs[count++] = now_us;
+          lastEdgePin = edgePin;
+          if (count == 2) break;
+        }
+      }
+      lastAC1 = ac1;
+      lastAC2 = ac2;
+    }
+  }
+#endif // ACLINE1_REG && ACLINE2_REG
+#endif // TARGET_SAMD
+
+  if (count < 2) return 0;
+
+  uint32_t halfPeriodUs = zcUs[1] - zcUs[0];
+  if (halfPeriodUs < 5000UL || halfPeriodUs > 15000UL) return 0;  // 33–100 Hz sanity
+
+  m_AcFreqX100 = (uint16_t)(100000000UL / (2UL * halfPeriodUs));
+  *zcTimeMsOut = millis() - (uint32_t)((micros() - zcUs[1]) / 1000UL);
+  return halfPeriodUs;
+}
+
+// Shared timing core for relay close and open.  Detects a voltage ZC via the
+// GMI line (updating m_AcFreqX100 as a side effect), then delays so the relay
+// coil is energized/de-energized advanceMs before the next predicted ZC.
+// Falls through immediately if no ZC is detected.
+void J1772EVSEController::zcWaitRelay(uint8_t advanceMs)
+{
+  unsigned long zcTimeMs = 0;
+  uint32_t halfPeriodUs = measureAcFreq(&zcTimeMs);
+
+  if (!zcTimeMs) return;
+
+  uint8_t halfPeriodMs = (uint8_t)((halfPeriodUs + 500UL) / 1000UL);
+  uint8_t n = 1;
+  while ((uint16_t)(n * halfPeriodMs) < advanceMs) n++;
+  uint32_t switchAt = zcTimeMs + (uint32_t)n * halfPeriodMs - advanceMs;
+  unsigned long now = millis();
+  if (switchAt > now) delay(switchAt - now);
+}
+
+void J1772EVSEController::zcWaitRelayClose() { zcWaitRelay(RELAY_CLOSE_ADVANCE_MS); }
+void J1772EVSEController::zcWaitRelayOpen()  { zcWaitRelay(RELAY_OPEN_ADVANCE_MS); }
+#endif // RELAY_ZC_SWITCH
 
 #define MA_PTS 32 // # points in moving average MUST BE power of 2
 #define MA_BITS 5 // log2(MA_PTS)
@@ -146,17 +286,23 @@ uint32_t MovingAverage(uint32_t samp)
 #endif // AMMETER
 
 J1772EVSEController::J1772EVSEController() :
-  adcPilot(PILOT_PIN)
+  adcPilot(PILOT_SENSE_PIN)
 #ifdef CURRENT_PIN
   , adcCurrent(CURRENT_PIN)
 #endif
 #ifdef VOLTMETER_PIN
   , adcVoltMeter(VOLTMETER_PIN)
 #endif
+#if defined(RELAY_ZC_SWITCH) && defined(TARGET_SAMD)
+  , adcGmi(GMI_ADC_PIN)
+#endif
 {
 #ifdef STATE_TRANSITION_REQ_FUNC
   m_StateTransitionReqFunc = NULL;
-#endif // STATE_TRANSITION_REQ_FUNC
+#endif
+#ifdef RELAY_ZC_SWITCH
+  m_AcFreqX100 = 0;
+#endif
 }
 
 void J1772EVSEController::SaveSettings()
@@ -204,9 +350,13 @@ void J1772EVSEController::Reboot()
     wdt_delay(3000);
   }
 
+#ifdef TARGET_SAMD
+  NVIC_SystemReset();
+#else // !TARGET_SAMD
   // hardware reset by forcing watchdog to timeout
-  wdt_enable(WDTO_1S);   // enable watchdog timer
+  WDT_ENABLE_1S();   // enable watchdog timer
   delay(1500);
+#endif
 }
 
 
@@ -268,37 +418,40 @@ void J1772EVSEController::ShowDisabledTests()
 
 void J1772EVSEController::chargingOn()
 {
+#ifdef RELAY_ZC_SWITCH
+  if (hasCGMI() && RelayZCSwitchEnabled()) zcWaitRelayClose();
+#endif
   // turn on charging current
 #ifdef OEV6
   if (isV6()) {
 #ifdef RELAY_PWM
-    Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
-    Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
+//    Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
+//    Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
     // turn on charging pin to close relay
-    digitalWrite(V6_CHARGING_PIN,HIGH);
-    digitalWrite(V6_CHARGING_PIN2,HIGH);
+    if (RelayDC1Enabled()) digitalWrite(V6_CHARGING_PIN,HIGH);
+    if (RelayDC2Enabled()) digitalWrite(V6_CHARGING_PIN2,HIGH);
     delay(m_relayCloseMs);
     // switch to PWM to hold closed
-    analogWrite(V6_CHARGING_PIN,m_relayHoldPwm);
-    analogWrite(V6_CHARGING_PIN2,m_relayHoldPwm);
+    if (RelayDC1Enabled()) analogWrite(V6_CHARGING_PIN,m_relayHoldPwm);
+    if (RelayDC2Enabled()) analogWrite(V6_CHARGING_PIN2,m_relayHoldPwm);
 #else // !RELAY_PWM
-    digitalWrite(V6_CHARGING_PIN,HIGH);
-    digitalWrite(V6_CHARGING_PIN2,HIGH);
+    if (RelayDC1Enabled()) digitalWrite(V6_CHARGING_PIN,HIGH);
+    if (RelayDC2Enabled()) digitalWrite(V6_CHARGING_PIN2,HIGH);
 #endif // RELAY_PWM
   }
   else {
 #endif // OEV6
 #ifdef CHARGING_REG
-    pinCharging.write(1);
+    if (RelayDC1Enabled()) pinCharging.write(1);
 #endif
 #ifdef CHARGING2_REG
-    pinCharging2.write(1);
+    if (RelayDC2Enabled()) pinCharging2.write(1);
 #endif // CHARGING2_REG
 #ifdef OEV6
   }
 #endif // OEV6
 #ifdef CHARGINGAC_REG
-    pinChargingAC.write(1);
+  if (RelayACEnabled()) pinChargingAC.write(1);
 #endif
 
   setVFlags(ECVF_CHARGING_ON);
@@ -315,8 +468,16 @@ void J1772EVSEController::chargingOn()
   m_ChargeOnTimeMS = millis();
 }
 
-void J1772EVSEController::chargingOff()
+void J1772EVSEController::chargingOff(uint8_t emergency)
 {
+#ifdef RELAY_ZC_SWITCH
+  if (!emergency && chargingIsOn() && RelayZCSwitchEnabled()) {
+#ifdef AMMETER
+    waitCurrentZero();
+#endif
+    zcWaitRelayOpen();
+  }
+#endif
  // turn off charging current
 #ifdef OEV6
   if (isV6()) {
@@ -351,6 +512,31 @@ void J1772EVSEController::chargingOff()
   m_ChargingCurrent = 0;
 #endif
 }
+
+#ifdef PP_AUTO_AMPACITY
+void J1772EVSEController::DoPPError(bool shorted)
+{
+  if (shorted) {
+    m_EvseState = EVSE_STATE_PP_SHORTED;
+  }
+  else {
+    m_EvseState = EVSE_STATE_PP_MISSING;
+  }
+  g_OBD.Update(OBD_UPD_FORCE);
+#ifdef RAPI
+  RapiSendEvseState();
+#endif
+  int ppmaxamps;
+   do {
+    ppmaxamps = g_ACCController.ReadPPMaxAmps();
+    ProcessInputs();
+    WDT_RESET();
+    delay(100);
+   } while ((shorted && !ppmaxamps) || // shorted
+            (!shorted && (ppmaxamps < PP_AMPS_ABSENT))); // missing
+  m_EvseState = EVSE_STATE_UNKNOWN;
+}
+#endif // PP_AUTO_AMPACITY
 
 void J1772EVSEController::HardFault(int8_t recoverable)
 {
@@ -388,7 +574,7 @@ void J1772EVSEController::SetGfiTripped()
 
   // this is repeated in Update(), but we want to keep latency as low as possible
   // for safety so we do it here first anyway
-  chargingOff(); // turn off charging current
+  chargingOff(1); // GFI: emergency open — no zero-crossing wait
   // turn off the PWM
   m_Pilot.SetState(PILOT_STATE_P12);
 
@@ -475,7 +661,7 @@ uint8_t J1772EVSEController::EnableAutoSvcLevel(uint8_t tf)
 {
   int rc = 0;
   if (tf) {
-    if (CGMIisEnabled()) rc = 1;
+    if (hasCGMI()) rc = 1;
     else clrFlags(ECF_AUTO_SVC_LEVEL_DISABLED);
   }
   else {
@@ -612,7 +798,8 @@ uint8_t J1772EVSEController::GetMaxCurrentCapacity()
   }
 
 #ifdef PP_AUTO_AMPACITY
-  if ((m_EvseState >= EVSE_STATE_B) && (m_EvseState <= EVSE_STATE_C)) {
+  if (g_ACCController.IsEnabled() &&
+      (m_EvseState >= EVSE_STATE_B) && (m_EvseState <= EVSE_STATE_C)) {
     uint8_t ppamps =  g_ACCController.GetPPMaxAmps();
     if (ppamps < ampacity) {
       ampacity = ppamps;
@@ -678,7 +865,7 @@ uint8_t J1772EVSEController::doPost()
   WDT_RESET();
 
   uint8_t RelayOff;
-#ifndef OPENEVSE_2
+#if !defined(OPENEVSE_2) && defined(AUTOSVCLEVEL)
   uint8_t Relay1, Relay2; //Relay Power status
 #endif
   uint8_t svcState = UD;	// service state = undefined
@@ -689,8 +876,16 @@ uint8_t J1772EVSEController::doPost()
   }
 #endif //#ifdef SERDBG
 
+#ifdef CALIBRATE
+  while (1) {
+    CALIB_DATA cd;
+    Calibrate(&cd);
+}
 
-  m_Pilot.SetState(PILOT_STATE_P12); //check to see if EV is plugged in
+#endif // CALIBRATE
+
+
+  m_Pilot.SetState(PILOT_STATE_PWM); //check to see if EV is plugged in
 
   g_OBD.SetRedLed(1);
 #ifdef LCD16X2 //Adafruit RGB LCD
@@ -720,7 +915,7 @@ uint8_t J1772EVSEController::doPost()
 #else //!OPENEVSE_2
     
     delay(150); // delay reading for stable pilot before reading
-    int reading = adcPilot.read(); //read pilot
+    uint16_t reading = adcPilot.read(); //read pilot
 #ifdef SERDBG
     if (SerDbgEnabled()) {
       Serial.print("Pilot: ");Serial.println((int)reading);
@@ -729,10 +924,10 @@ uint8_t J1772EVSEController::doPost()
     
     m_Pilot.SetState(PILOT_STATE_N12);
     if (reading >= m_ThreshData.m_ThreshAB) {  // IF EV is not connected its Okay to open the relay the do the L1/L2 and ground Check
-      
+
       // save state with both relays off - for stuck relay state
       RelayOff = ReadACPins();
-      
+
       // save state with Relay 1 on 
 #ifdef OEV6
       if (isV6()) {
@@ -750,7 +945,7 @@ uint8_t J1772EVSEController::doPost()
       pinChargingAC.write(1);
 #endif
 
-      delay(RelaySettlingTime);
+      wdt_delay(RelaySettlingTime);
       Relay1 = ReadACPins();
 
 #ifdef OEV6
@@ -873,8 +1068,8 @@ uint8_t J1772EVSEController::doPost()
 #endif
     if (StuckRelayChkEnabled()) {
       RelayOff = ReadACPins();
-      if ((CGMIisEnabled() && !(RelayOff & RLY_TEST_PIN_OPEN)) ||
-          (!CGMIisEnabled() && (RelayOff != ACPINS_OPEN))) {
+      if ((hasCGMI() && !(RelayOff & RLY_TEST_PIN_OPEN)) ||
+          (!hasCGMI() && (RelayOff != ACPINS_OPEN))) {
 	svcState = SR;
 #ifdef LCD16X2
 	g_OBD.LcdMsg_P(g_psTestFailed,g_psStuckRelay);
@@ -925,18 +1120,6 @@ uint8_t J1772EVSEController::doPost()
 
 void J1772EVSEController::Init()
 {
-#ifdef OEV6
-  DPIN_MODE_INPUT(V6_ID_REG,V6_ID_IDX);
-#ifdef INVERT_V6_DETECTION
-  if (DPIN_READ(V6_ID_REG,V6_ID_IDX)) m_isV6 = 0;
-  else m_isV6 = 1;
-#else
-  if (DPIN_READ(V6_ID_REG,V6_ID_IDX)) m_isV6 = 1;
-  else m_isV6 = 0;
-#endif
-  //  Serial.print("isV6: ");Serial.println(isV6());
-#endif
-
 #ifdef MENNEKES_LOCK
   m_MennekesLock.Init();
 #endif // MENNEKES_LOCK
@@ -960,9 +1143,14 @@ void J1772EVSEController::Init()
     m_relayCloseMs = DEFAULT_RELAY_CLOSE_MS;
     m_relayHoldPwm = DEFAULT_RELAY_HOLD_PWM;
   }
-  Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
-  Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
+//  Serial.print("\nrelayCloseMs: ");Serial.println(m_relayCloseMs);
+//  Serial.print("relayHoldPwm: ");Serial.println(m_relayHoldPwm);
 #endif // RELAY_PWM
+
+  m_relayFlags = eeprom_read_byte((uint8_t*)EOFS_RELAY_FLAGS);
+  if (m_relayFlags == 0xff) { // uninitialized EEPROM
+    m_relayFlags = ERELAYF_DEFAULT;
+  }
 
 
 #ifdef OEV6
@@ -1032,11 +1220,12 @@ void J1772EVSEController::Init()
   m_wFlags |= ECF_AUTO_SVC_LEVEL_DISABLED;
 #endif
 
-#ifdef ENABLE_CGMI
-  m_wFlags |= ECF_CGMI;
-#endif // ENABLE_CGMI
-
-  if (CGMIisEnabled() && !flagIsSet(ECF_AUTO_SVC_LEVEL_DISABLED)) {
+#ifdef OEV6
+  if (g_hasCGMI) {
+    m_wFlags |= ECF_CGMI;
+  }
+#endif
+  if (hasCGMI() && !flagIsSet(ECF_AUTO_SVC_LEVEL_DISABLED)) {
     // can't do auto svc level when CGMI enabled, revert to default
     setFlags(ECF_AUTO_SVC_LEVEL_DISABLED);
     svclvl = DEFAULT_SERVICE_LEVEL;
@@ -1053,8 +1242,8 @@ void J1772EVSEController::Init()
 #endif
 
 #ifdef AMMETER
-  m_AmmeterCurrentOffset = eeprom_read_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET);
-  m_CurrentScaleFactor = eeprom_read_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR);
+  m_AmmeterCurrentOffset = (int16_t)eeprom_read_word((uint16_t*)EOFS_AMMETER_CURR_OFFSET);
+  m_CurrentScaleFactor = (int16_t)eeprom_read_word((uint16_t*)EOFS_CURRENT_SCALE_FACTOR);
   
   if (m_AmmeterCurrentOffset == (int16_t)0xffff) {
     m_AmmeterCurrentOffset = DEFAULT_AMMETER_CURRENT_OFFSET;
@@ -1065,6 +1254,20 @@ void J1772EVSEController::Init()
   
   m_AmmeterReading = 0;
   m_ChargingCurrent = 0;
+
+#ifdef AMMETER_TESTtt
+  // for debugging only
+  while (1) {
+    char s[80];
+    readAmmeter();
+      long instantma = m_AmmeterReading*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+      sprintf(s,"%u %u %d\n",(unsigned)adcCurrent.read(),m_AmmeterReading,instantma);
+    RAPI_SERIAL_PORT.print(s);
+    delay(250);
+  }
+#endif // AMMETER_TEST
+
+
 #ifdef OVERCURRENT_THRESHOLD
   m_OverCurrentStartMs = 0;
 #endif //OVERCURRENT_THRESHOLD
@@ -1087,10 +1290,11 @@ void J1772EVSEController::Init()
   m_wFlags |= ECF_MONO_LCD;
 #endif
 
-  m_wVFlags = ECVF_DEFAULT;
+  setVFlags(ECVF_DEFAULT);
 
 #ifdef BOOTLOCK
-  m_wVFlags |= ECVF_BOOT_LOCK;
+  if (BootLockIsEnabled())
+    setVFlags(ECVF_BOOT_LOCK);
 #endif
 
   m_MaxHwCurrentCapacity = eeprom_read_byte((uint8_t*)EOFS_MAX_HW_CURRENT_CAPACITY);
@@ -1192,10 +1396,10 @@ void J1772EVSEController::Init()
 
 void J1772EVSEController::ReadPilot(uint16_t *plow,uint16_t *phigh)
 {
-  uint16_t pl = 1023;
+  uint16_t pl = ADC_MAX;
   uint16_t ph = 0;
 
-  // 1x = 114us 20x = 2.3ms 100x = 11.3ms
+  //  uint32_t sms = millis();
   for (int i=0;i < PILOT_LOOP_CNT;i++) {
     uint16_t reading = adcPilot.read();  // measures pilot voltage
     
@@ -1206,6 +1410,7 @@ void J1772EVSEController::ReadPilot(uint16_t *plow,uint16_t *phigh)
       pl = reading;
     }
   }
+  //  RAPI_SERIAL_PORT.print("pilotread ");RAPI_SERIAL_PORT.println(millis()-sms);
 
   if (m_Pilot.GetState() != PILOT_STATE_N12) {
     // update prev state
@@ -1244,9 +1449,10 @@ void J1772EVSEController::ReadPilot(uint16_t *plow,uint16_t *phigh)
 void J1772EVSEController::Update(uint8_t forcetransition)
 {
   uint16_t plow;
-  uint16_t phigh = 0xffff;
+  uint16_t phigh = ADC_MAX;
 
   unsigned long curms = millis();
+  WDT_RESET();
 
   if (m_EvseState == EVSE_STATE_DISABLED) {
     m_PrevEvseState = m_EvseState; // cancel state transition
@@ -1332,29 +1538,32 @@ void J1772EVSEController::Update(uint8_t forcetransition)
 #ifdef ADVPWR
   uint8_t acpinstate = ReadACPins();
 
-  if (CGMIisEnabled() && GndChkEnabled() && (acpinstate & GND_TEST_PIN_OPEN)) {
+  if (hasCGMI() && GndChkEnabled() && (acpinstate & GND_TEST_PIN_OPEN)) {
     // bad ground
     tmpevsestate = EVSE_STATE_NO_GROUND;
     m_EvseState = EVSE_STATE_NO_GROUND;
     chargingOff(); // open the relay
-    if ((prevevsestate != EVSE_STATE_NO_GROUND) &&
-        (((uint8_t)(m_NoGndTripCnt+1)) < 254)) {
-      m_NoGndTripCnt++;
-      eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,m_NoGndTripCnt);
+    if (prevevsestate != EVSE_STATE_NO_GROUND) {
+      m_NoGndStart = curms;
+    }
+    else if (m_NoGndStart && ((curms - m_NoGndStart) >= NO_GND_RECORD_DELAY) &&
+             (((uint8_t)(m_NoGndTripCnt+1)) < 253)) {
+      eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,++m_NoGndTripCnt);
+      m_NoGndStart = 0;
     }
     nofault = 0;
   }
   
   if (nofault) {
     if (chargingIsOn()) { // relay closed
-      if (StuckRelayChkEnabled() && CGMIisEnabled() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY) && (acpinstate & RLY_TEST_PIN_OPEN)) {
+      if (StuckRelayChkEnabled() && hasCGMI() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY) && (acpinstate & RLY_TEST_PIN_OPEN)) {
         // relay didn't close
         chargingOff(); // open the relay
         tmpevsestate = EVSE_STATE_RELAY_CLOSURE_FAULT;
         m_EvseState = EVSE_STATE_RELAY_CLOSURE_FAULT;
         nofault = 0;
       }
-      else if (!CGMIisEnabled() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY)) {
+      else if (!hasCGMI() && ((curms - m_ChargeOnTimeMS) > GROUND_CHK_DELAY)) {
         // ground check - can only test when relay closed
         if (GndChkEnabled() && (acpinstate == ACPINS_OPEN)) {
           // bad ground
@@ -1362,7 +1571,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
           m_EvseState = EVSE_STATE_NO_GROUND;
           
           chargingOff(); // open the relay
-          if ((prevevsestate != EVSE_STATE_NO_GROUND) && (((uint8_t)(m_NoGndTripCnt+1)) < 254)) {
+          if ((prevevsestate != EVSE_STATE_NO_GROUND) && (((uint8_t)(m_NoGndTripCnt+1)) < 253)) {
             m_NoGndTripCnt++;
             eeprom_write_byte((uint8_t*)EOFS_NOGND_TRIP_CNT,m_NoGndTripCnt);
           }
@@ -1385,7 +1594,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
       }
     }
     else { // !chargingIsOn() - relay open
-      if (!CGMIisEnabled() && (prevevsestate == EVSE_STATE_NO_GROUND)) {
+      if (!hasCGMI() && (prevevsestate == EVSE_STATE_NO_GROUND)) {
         // check to see if EV disconnected
         if (!EvConnected()) {
           // EV disconnected - cancel fault
@@ -1405,8 +1614,8 @@ void J1772EVSEController::Update(uint8_t forcetransition)
         }
       }
       else if (StuckRelayChkEnabled()) {    // stuck relay check - can test only when relay open
-        if ((CGMIisEnabled() && !(acpinstate & RLY_TEST_PIN_OPEN)) ||
-            (!CGMIisEnabled() && (acpinstate != ACPINS_OPEN))) { // Stuck Relay reading
+        if ((hasCGMI() && !(acpinstate & RLY_TEST_PIN_OPEN)) ||
+            (!hasCGMI() && (acpinstate != ACPINS_OPEN))) { // Stuck Relay reading
           if ((prevevsestate != EVSE_STATE_STUCK_RELAY) && !m_StuckRelayStartTimeMS) { //check for first occurence
             m_StuckRelayStartTimeMS = curms; // mark start state
           }
@@ -1414,7 +1623,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
                  ((curms - m_StuckRelayStartTimeMS) > STUCK_RELAY_DELAY) ) ||  // start delay de-bounce
                (prevevsestate == EVSE_STATE_STUCK_RELAY) ) { // already in error state
             // stuck relay
-            if ((prevevsestate != EVSE_STATE_STUCK_RELAY) && (((uint8_t)(m_StuckRelayTripCnt+1)) < 254)) {
+            if ((prevevsestate != EVSE_STATE_STUCK_RELAY) && (((uint8_t)(m_StuckRelayTripCnt+1)) < 253)) {
               m_StuckRelayTripCnt++;
               eeprom_write_byte((uint8_t*)EOFS_STUCK_RELAY_TRIP_CNT,m_StuckRelayTripCnt);
             }   
@@ -1435,7 +1644,7 @@ void J1772EVSEController::Update(uint8_t forcetransition)
     m_EvseState = EVSE_STATE_GFCI_FAULT;
 
     if (prevevsestate != EVSE_STATE_GFCI_FAULT) { // state transition
-      if (((uint8_t)(m_GfiTripCnt+1)) < 254) {
+      if (((uint8_t)(m_GfiTripCnt+1)) < 253) {
 	m_GfiTripCnt++;
 	eeprom_write_byte((uint8_t*)EOFS_GFI_TRIP_CNT,m_GfiTripCnt);
       }
@@ -1475,9 +1684,10 @@ void J1772EVSEController::Update(uint8_t forcetransition)
 
 #ifdef TEMPERATURE_MONITORING                 //  A state for OverTemp fault
 if (TempChkEnabled()) {
+  int16_t thresh = g_TempMonitor.GetPanicTemperature();
   if ((g_TempMonitor.m_TMP007_temperature >= TEMPERATURE_INFRARED_PANIC)  ||
-      (g_TempMonitor.m_MCP9808_temperature >= TEMPERATURE_AMBIENT_PANIC)  ||
-      (g_TempMonitor.m_DS3231_temperature >= TEMPERATURE_AMBIENT_PANIC))  {
+      (g_TempMonitor.m_MCP9808_temperature >= thresh)  ||
+      (g_TempMonitor.m_DS3231_temperature >= thresh))  {
     tmpevsestate = EVSE_STATE_OVER_TEMPERATURE;
     m_EvseState = EVSE_STATE_OVER_TEMPERATURE;
     nofault = 0;
@@ -1752,6 +1962,13 @@ if (TempChkEnabled()) {
       chargingOff(); // turn off charging current
       m_Pilot.SetState(PILOT_STATE_P12);
     }
+#ifdef PP_AUTO_AMPACITY
+    else if ((m_EvseState == EVSE_STATE_PP_SHORTED) || (m_EvseState == EVSE_STATE_PP_MISSING)) {
+      // PP pin shorted
+      chargingOff(); // turn off charging current
+      m_Pilot.SetState(PILOT_STATE_P12);
+    }
+#endif // PP_AUTO_AMPACITY
     else if (m_EvseState == EVSE_STATE_STUCK_RELAY) {
       // Stuck relay detected
       chargingOff(); // turn off charging current
@@ -1828,39 +2045,44 @@ if (TempChkEnabled()) {
   }
 
 #ifdef OVERCURRENT_THRESHOLD
-  if (m_EvseState == EVSE_STATE_C) {
-    //testing    m_ChargingCurrent = (m_CurrentCapacity+OVERCURRENT_THRESHOLD+12)*1000L;
-    if (m_ChargingCurrent >= ((m_CurrentCapacity+OVERCURRENT_THRESHOLD)*1000L)) {
-      if (m_OverCurrentStartMs) { // already in overcurrent state
-	if ((millis()-m_OverCurrentStartMs) >= OVERCURRENT_TIMEOUT) {
-	  //
-	  // overcurrent for too long. stop charging and hard fault
-	  //
-	  m_EvseState = EVSE_STATE_OVER_CURRENT;
+  if (OverCurrentCheckIsEnabled()) {
+    if (m_EvseState == EVSE_STATE_C) {
+      // testing    m_ChargingCurrent =
+      // (m_CurrentCapacity+OVERCURRENT_THRESHOLD+12)*1000L;
+      if (m_ChargingCurrent >=
+          ((m_CurrentCapacity + OVERCURRENT_THRESHOLD) * 1000L)) {
+        if (m_OverCurrentStartMs) { // already in overcurrent state
+          if ((millis() - m_OverCurrentStartMs) >= OVERCURRENT_TIMEOUT) {
+            //
+            // overcurrent for too long. stop charging and hard fault
+            //
+            m_EvseState = EVSE_STATE_OVER_CURRENT;
 
-	  m_Pilot.SetState(PILOT_STATE_P12); // Signal the EV to pause
-	  curms = millis();
-	  while ((millis()-curms) < 1000) { // give EV 1s to stop charging
-	    wdt_reset();
-	  }
-	  chargingOff(); // open the EVSE relays hopefully the EV has already discon
+            m_Pilot.SetState(PILOT_STATE_P12); // Signal the EV to pause
+            curms = millis();
+            while ((millis() - curms) < 1000) { // give EV 1s to stop charging
+              wdt_reset();
+            }
+            chargingOff(); // open the EVSE relays hopefully the EV
+                           // has already discon
 
-	  // spin until EV is disconnected
-	  HardFault(1);
-	  
-	  m_OverCurrentStartMs = 0; // clear overcurrent
-	}
+            // spin until EV is disconnected
+            HardFault(1);
+
+            m_OverCurrentStartMs = 0; // clear overcurrent
+          }
+        }
+        else {
+          m_OverCurrentStartMs = millis();
+        }
       }
       else {
-	m_OverCurrentStartMs = millis();
+        m_OverCurrentStartMs = 0; // clear overcurrent
       }
     }
     else {
       m_OverCurrentStartMs = 0; // clear overcurrent
     }
-  }
-  else {
-    m_OverCurrentStartMs = 0; // clear overcurrent
   }
 #endif // OVERCURRENT_THRESHOLD
 #endif // AMMETER
@@ -1870,7 +2092,7 @@ if (TempChkEnabled()) {
     this->HsExpirationCheck();  //Check to see if HS is engaged, and if so whether we missed a pulse
 #endif //HEARTBEAT_SUPERVISION
 
-#ifdef TEMPERATURE_MONITORING
+#ifdef TEMPERATURE_THROTTLING
     if(TempChkEnabled()) {
       uint8_t currcap = GetMaxCurrentCapacity();
       uint8_t setit = 0;
@@ -1983,7 +2205,7 @@ void J1772EVSEController::Calibrate(PCALIB_DATA pcd)
   for (int l=0;l < 2;l++) {
     int reading;
     uint32_t tot = 0;
-    uint16_t plow = 1023;
+    uint16_t plow = ADC_MAX
     uint16_t phigh = 0;
     uint16_t avg = 0;
     m_Pilot.SetState(l ? PILOT_STATE_N12 : PILOT_STATE_P12);
@@ -2017,6 +2239,10 @@ void J1772EVSEController::Calibrate(PCALIB_DATA pcd)
       pavg = avg;
     }
   }
+
+  sprintf(g_sTmp,"p %d %d %d,n %d %d %d",pmax,pavg,pmin,nmax,navg,nmin);
+  RAPI_SERIAL_PORT.println(g_sTmp);
+
   pcd->m_pMax = pmax;
   pcd->m_pAvg = pavg;
   pcd->m_pMin = pmin;
@@ -2034,16 +2260,17 @@ int J1772EVSEController::SetCurrentCapacity(uint8_t amps,uint8_t updatelcd,uint8
   if (nosave) {
     // temporary amps can't be > max set in EEPROM
     maxcurrentcap = GetMaxCurrentCapacity();
-  }
 
 #ifdef PP_AUTO_AMPACITY
   if ((GetState() >= EVSE_STATE_B) && (GetState() <= EVSE_STATE_C)) {
     uint8_t mcc = g_ACCController.ReadPPMaxAmps();
-    if (mcc && (mcc < maxcurrentcap)) {
+    if (mcc && (mcc != PP_AMPS_ABSENT) && (mcc < maxcurrentcap)) {
       maxcurrentcap = mcc;
     }
   }
 #endif // PP_AUTO_AMPACITY
+  }
+
 
   if ((amps >= MIN_CURRENT_CAPACITY_J1772) && (amps <= maxcurrentcap)) {
     m_CurrentCapacity = amps;

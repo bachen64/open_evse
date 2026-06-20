@@ -13,17 +13,25 @@ jobs:
         sudo apt-get install jq -y
 
     - name: Download the built assets
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         path: artifacts
 
     - name: Rename images to something more sensible
       run: |
-        find artifacts -name '*.hex' | while read -r image; do
-          dir=$(dirname "${image}")
-          board=$(basename "${dir}")
-          echo mv "$image" "$board.hex"
-          mv "$image" "$board.hex"
+        # Rename firmware outputs: firmware.{hex,bin,uf2} -> <board>.{hex,bin,uf2}
+        for ext in hex bin uf2; do
+          find artifacts -name "firmware.$ext" | while read -r image; do
+            dir=$(dirname "${image}")
+            board=$(basename "${dir}")
+            echo mv "$image" "$board.$ext"
+            mv "$image" "$board.$ext"
+          done
+        done
+        # Move bootloader binaries to the top level keeping their descriptive name
+        find artifacts -name "bootloader-*.bin" | while read -r image; do
+          echo mv "$image" "$(basename "$image")"
+          mv "$image" "$(basename "$image")"
         done
         jq -s . $(find -name info.json) > build_info.json
         jq -r '(map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv' build_info.json > build_info.csv
@@ -37,5 +45,7 @@ jobs:
         title: "Development Build"
         files: |
           *.hex
+          *.bin
+          *.uf2
           build_info.json
           build_info.csv
