@@ -348,6 +348,7 @@ extern AutoCurrentCapacityController g_ACCController;
 #define ZC_DETECT_TIMEOUT_MS       35  // > one full AC cycle (50 Hz = 20 ms)
 #define AC_ZC_HALF_PERIOD_MS        8  // conservative half-period (works 50 & 60 Hz)
 #define CURRENT_ZERO_THRESHOLD_MA 100  // mA; current below this = safe to open relay (0.1 A)
+#define CURRENT_ZERO_TIMEOUT_MS  1000  // ms; give up waiting for zero and open the relay anyway
 #endif // RELAY_ZC_SWITCH
 
 // OEV6 w/ CGMI - when power is loss, temporarily triggers NO GROUND fault

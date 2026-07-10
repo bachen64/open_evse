@@ -115,17 +115,22 @@ void J1772EVSEController::readAmmeter()
 }
 
 #ifdef RELAY_ZC_SWITCH
-// Block until AC current amplitude drops below CURRENT_ZERO_THRESHOLD_MA (0.1 A).
-// Polls readAmmeter() indefinitely. WDT_RESET() called each iteration.
-// Emergency opens (chargingOff(1)) bypass this entirely.
+// Wait for AC current amplitude to drop below CURRENT_ZERO_THRESHOLD_MA
+// (0.1 A) so the relay can be opened at a current zero. Polls readAmmeter()
+// until the current falls below threshold or CURRENT_ZERO_TIMEOUT_MS elapses,
+// whichever comes first. The timeout guarantees the caller can proceed to open
+// the relay even if the measured current never reads below threshold (e.g. a
+// calibration offset that floors the computed current above it). WDT_RESET()
+// called each iteration. Emergency opens (chargingOff(1)) bypass this entirely.
 void J1772EVSEController::waitCurrentZero()
 {
+  unsigned long start = millis();
   do {
     WDT_RESET();
     readAmmeter();
     int32_t ma = (int32_t)m_AmmeterReading * m_CurrentScaleFactor - m_AmmeterCurrentOffset;
     if (ma < (int32_t)CURRENT_ZERO_THRESHOLD_MA) return;
-  } while (1);
+  } while ((millis() - start) < CURRENT_ZERO_TIMEOUT_MS);
 }
 
 // Measure AC frequency.  Stores the result (×100) in m_AcFreqX100 and sets
