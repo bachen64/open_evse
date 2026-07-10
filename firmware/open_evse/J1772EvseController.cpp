@@ -1220,11 +1220,18 @@ void J1772EVSEController::Init()
   m_wFlags |= ECF_AUTO_SVC_LEVEL_DISABLED;
 #endif
 
-#ifdef OEV6
+  // g_hasCGMI is set by initTarget() on all targets: autodetected on OEV6,
+  // hardwired true on SAMD (OpenEVSE NXT). Must not be gated on OEV6, or the
+  // NXT runs with hasCGMI()==false: the relay close is never zero-cross timed
+  // and the ground/stuck-relay checks use the wrong (non-CGMI) semantics.
+  // ECF_CGMI reflects detected hardware, not a user setting, so also clear a
+  // stale bit carried over in the EEPROM flags.
   if (g_hasCGMI) {
     m_wFlags |= ECF_CGMI;
   }
-#endif
+  else {
+    m_wFlags &= ~ECF_CGMI;
+  }
   if (hasCGMI() && !flagIsSet(ECF_AUTO_SVC_LEVEL_DISABLED)) {
     // can't do auto svc level when CGMI enabled, revert to default
     setFlags(ECF_AUTO_SVC_LEVEL_DISABLED);
