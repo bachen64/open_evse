@@ -156,9 +156,6 @@ class J1772EVSEController {
 #ifdef VOLTMETER_PIN
   AdcPin adcVoltMeter;
 #endif
-#if defined(RELAY_ZC_SWITCH) && defined(TARGET_SAMD)
-  AdcPin adcGmi;  // GMI_LINE (PA09) analog signal for voltage ZC detection
-#endif
 
 #ifdef CHARGING_REG
   DigitalPin pinCharging;

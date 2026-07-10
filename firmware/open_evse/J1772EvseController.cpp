@@ -138,7 +138,7 @@ void J1772EVSEController::waitCurrentZero()
 // Returns the half-period in µs, or 0 (with *zcTimeMsOut = 0) on failure.
 //
 // Detection method depends on hardware:
-//   SAMD:        ADC sign-change on GMI_LINE (adcGmi, PA09).
+//   SAMD:        ADC sign-change on GMI_LINE (PA09 / AIN[17], direct ADC).
 //   m328p CGMI:  digital off-period pulses on pinAC2 — HIGH = near voltage ZC.
 //   m328p non-CGMI: each AC channel drives one diode half-wave (pinAC1 and
 //                pinAC2).  Rising edges alternate between channels every
@@ -151,11 +151,16 @@ uint32_t J1772EVSEController::measureAcFreq(unsigned long *zcTimeMsOut)
   uint8_t count = 0;
 
 #if defined(TARGET_SAMD)
-  // ADC sign-change detection on GMI_LINE
+  // ADC sign-change detection on GMI_LINE (PA09 / AIN[17]).  gmiAdcBegin()
+  // switches PA09 from its digital ACLINE2 input to the analog mux for the
+  // duration of the burst; gmiAdcEnd() restores the digital pull-up.  We must
+  // read PA09 via a direct ADC register access — analogRead() would sample the
+  // wrong (floating) pin; see targets/samd/target.cpp.
   uint8_t isFirst = 1;
   uint16_t lastSample = 0;
+  gmiAdcBegin();
   for (uint32_t start = micros(); (micros() - start) < (ZC_DETECT_TIMEOUT_MS * 3000UL); ) {
-    uint16_t sample = (uint16_t)adcGmi.read();
+    uint16_t sample = gmiAdcRead();
     if (!isFirst && ((lastSample > ADC_HALF) != (sample > ADC_HALF))) {
       uint32_t now_us = micros();
       // debounce: require at least 4 ms between accepted crossings
@@ -167,6 +172,7 @@ uint32_t J1772EVSEController::measureAcFreq(unsigned long *zcTimeMsOut)
     isFirst = 0;
     lastSample = sample;
   }
+  gmiAdcEnd();
 #else
   if (hasCGMI()) {
     // m328p CGMI: digital off-period pulses on pinAC2.
@@ -297,9 +303,6 @@ J1772EVSEController::J1772EVSEController() :
 #endif
 #ifdef VOLTMETER_PIN
   , adcVoltMeter(VOLTMETER_PIN)
-#endif
-#if defined(RELAY_ZC_SWITCH) && defined(TARGET_SAMD)
-  , adcGmi(GMI_ADC_PIN)
 #endif
 {
 #ifdef STATE_TRANSITION_REQ_FUNC

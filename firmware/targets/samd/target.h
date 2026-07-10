@@ -90,9 +90,26 @@ public:
   }
 
   uint32_t read() {
+    // NB pin-number remap trap: the SAMD Arduino core's analogRead() does
+    // `if (pin < A0) pin += A0;` (wiring_analog.c), so an AdcPin built with a
+    // low digital pin number silently samples a *different*, A0-offset pin.
+    // Safe here only because every AdcPin instance uses A0..A5 (>= A0):
+    // PILOT_SENSE_PIN, CURRENT_PIN, PP_PIN.  The GMI zero-cross line on PA09
+    // (pin 3) cannot use analogRead() at all — see gmiAdc*() below.
     return analogRead(_pinNum);
   }
 };
+
+#ifdef RELAY_ZC_SWITCH
+// Read the AC zero-cross signal on the GMI line (PA09 / AIN[17]) via a direct
+// SAMD21 ADC register access — analogRead() cannot reach it (see target.cpp).
+// gmiAdcBegin()/gmiAdcEnd() bracket a sampling burst: they switch PA09 from its
+// digital ACLINE2 ground-monitor input (INP_PU) to the analog mux and back,
+// restoring the digital pull-up afterwards.  Do NOT call these per-sample.
+void gmiAdcBegin();
+uint16_t gmiAdcRead();
+void gmiAdcEnd();
+#endif // RELAY_ZC_SWITCH
 
 void getMcuId(uint8_t *mcuid);
 
