@@ -30,6 +30,14 @@
 #include "open_evse.h"
 
 #ifdef RAPI
+
+// g_sTmp must hold the largest RAPI response text plus its framing. $GI
+// writes up to 2*MCU_ID_LEN hex chars into buffer[]; response() then wraps
+// it as '$' + "OK" + ' ' + buffer + " :XX" seq + "^XX" + CR + NUL.
+#if defined(MCU_ID_LEN) && (TMP_BUF_SIZE < (3 + 1 + (2*MCU_ID_LEN) + 4 + 4 + 1))
+#error "TMP_BUF_SIZE too small for the $GI RAPI response on this target"
+#endif
+
 const char RAPI_VER[] PROGMEM = RAPIVER;
 
 
@@ -779,7 +787,7 @@ int EvseRapiProcessor::processCmd()
         uint8_t mcuid[MCU_ID_LEN];
         getMcuId(mcuid);
         char *s = buffer;
-#ifdef TARGET_M238P
+#ifdef TARGET_M328P
         *(s++) = ' ';
         for (int i=0;i < 6;i++) {
           *(s++) = mcuid[i];

@@ -437,7 +437,20 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #define LCD_MAX_CHARS_PER_LINE 16
 
+// g_sTmp doubles as an LCD scratch buffer and the RAPI response assembly
+// buffer. response() builds the largest RAPI reply here, so it must hold
+// the worst case. On SAMD that is $GI (16-byte MCU id):
+//   SOC '$' (1) + "OK" (2) + " " (1) + 2*MCU_ID_LEN hex chars (32)
+//   + " :XX" sequence id (4) + "^XX" checksum + CR (4) + NUL (1) = 45.
+// On AVR the largest reply ($GS with a sequence id) is exactly 34 and its
+// 10-byte MCU id needs only 33 for $GI, so the LCD-derived 34 still fits;
+// keep AVR unchanged so its RAM footprint does not grow. See the matching
+// #error guard in rapi_proc.cpp.
+#ifdef TARGET_SAMD
+#define TMP_BUF_SIZE 48
+#else
 #define TMP_BUF_SIZE ((LCD_MAX_CHARS_PER_LINE+1)*2)
+#endif
 
 
 // n.b. DEFAULT_SERVICE_LEVEL is ignored if ADVPWR defined, since it's autodetected

@@ -409,7 +409,20 @@ Z0 closems holdpwm
 #define WIFI_MODE_CLIENT 1
 #define WIFI_MODE_AP_DEFAULT 2
 
+// buffer[] holds an inbound RAPI command and is reused to build the
+// outbound response text. The longest response text is $GI (get MCU id),
+// whose #else branch writes 2*MCU_ID_LEN hex chars plus a NUL. On SAMD
+// MCU_ID_LEN is 16, so that is 2*16+1 = 33 bytes and the historic 32-byte
+// buffer overflowed by one, corrupting the adjacent bufCnt member. Size
+// per target so AVR RAM cost stays zero.
+#ifdef TARGET_SAMD
+#define ESRAPI_BUFLEN 40
+#else
 #define ESRAPI_BUFLEN 32
+#endif
+#if defined(MCU_ID_LEN) && (ESRAPI_BUFLEN < (2*MCU_ID_LEN + 1))
+#error "ESRAPI_BUFLEN too small for the $GI response on this target"
+#endif
 #define ESRAPI_SOC '$' // start of command
 #define ESRAPI_EOC 0xd // CR end of command
 #define ESRAPI_SOS ':' // start of sequence id
