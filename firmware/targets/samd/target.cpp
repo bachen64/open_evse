@@ -34,6 +34,95 @@ void getMcuId(uint8_t *mcuid)
 #endif // MCU_ID_LEN
 
 
+#ifdef RELAY_ZC_SWITCH
+// --- GMI zero-cross ADC on PA09 / AIN[17] -----------------------------------
+//
+// The AC voltage zero-cross ("GMI") line is on PA09.  analogRead() cannot read
+// it, for two independent reasons:
+//
+//   1. Pin-number remap: analogRead(pin) does `if (pin < A0) pin += A0;`
+//      (wiring_analog.c).  GMI_ADC_PIN is Arduino pin 3 (PA09), and 3 < A0(14),
+//      so analogRead(3) actually samples pin 3+14 = 17 = A3 = PA04 — an
+//      unconnected, floating pin.
+//   2. Even without the remap, the arduino_zero variant descriptor for PA09
+//      carries No_ADC_Channel, so analogRead() has no ADC channel to select for
+//      it.  PA09's real ADC input is AIN[17] (INPUTCTRL.MUXPOS = 0x11), which
+//      the variant table simply cannot express.
+//
+// So we drive the ADC directly on MUXPOS = 0x11 here, following the same
+// enable / discard-first-conversion / read / disable sequence the core's
+// analogRead() uses, so it coexists cleanly with analogRead() on the other
+// AdcPins (which enable/disable the ADC per call and leave it disabled).
+//
+// PA09 is *also* the digital ACLINE2 ground-monitor input (pinAC2, INP_PU),
+// polled by ReadACPins().  gmiAdcBegin() switches it to the analog mux with the
+// pull-up OFF (an enabled pull-up would bias the sample); gmiAdcEnd() restores
+// it to a digital input with pull-up, faithfully reproducing DigitalPin INP_PU.
+//
+// Do NOT "simplify" any of this back to analogRead() — it would read PA04.
+
+#define GMI_ADC_MUXPOS 0x11u // AIN[17] = PA09
+
+// Wait for ADC register synchronization across clock domains (SAMD21 requires
+// this after CTRLA.ENABLE, INPUTCTRL and before SWTRIG writes).
+static inline void gmiSyncADC()
+{
+  while (ADC->STATUS.bit.SYNCBUSY == 1)
+    ;
+}
+
+void gmiAdcBegin()
+{
+  EPortType port = (EPortType)g_APinDescription[GMI_ADC_PIN].ulPort;
+  uint32_t   pin  = g_APinDescription[GMI_ADC_PIN].ulPin; // PA09 -> 9
+
+  // Route PA09 to peripheral function B (analog) in the PORT pin-mux.  PA09 is
+  // odd, so write PMUXO while preserving the even-nibble (PA08) muxing.
+  uint32_t pmux = PORT->Group[port].PMUX[pin >> 1].reg & PORT_PMUX_PMUXE(0xF);
+  PORT->Group[port].PMUX[pin >> 1].reg = pmux | PORT_PMUX_PMUXO(PIO_ANALOG);
+  // Enable the mux and clear INEN + PULLEN: no digital input buffer, and no
+  // pull-up to bias the analog reading.
+  PORT->Group[port].PINCFG[pin].reg = PORT_PINCFG_PMUXEN;
+
+  // Select AIN[17] as the positive input.  MUXNEG stays at GND (core default).
+  gmiSyncADC();
+  ADC->INPUTCTRL.bit.MUXPOS = GMI_ADC_MUXPOS;
+
+  gmiSyncADC();
+  ADC->CTRLA.bit.ENABLE = 0x01; // enable ADC
+  gmiSyncADC();
+
+  // The first conversion after a MUXPOS change is not valid (SAMD21 datasheet);
+  // trigger one and discard it.
+  ADC->SWTRIG.bit.START = 1;
+  while (ADC->INTFLAG.bit.RESRDY == 0)
+    ;
+  ADC->INTFLAG.reg = ADC_INTFLAG_RESRDY; // clear ready flag
+}
+
+uint16_t gmiAdcRead()
+{
+  gmiSyncADC();
+  ADC->SWTRIG.bit.START = 1;
+  while (ADC->INTFLAG.bit.RESRDY == 0)
+    ;
+  return (uint16_t)ADC->RESULT.reg; // 12-bit result; reading RESULT clears RESRDY
+}
+
+void gmiAdcEnd()
+{
+  gmiSyncADC();
+  ADC->CTRLA.bit.ENABLE = 0x00; // disable ADC (leave it as analogRead() expects)
+  gmiSyncADC();
+
+  // Restore PA09 to the digital ACLINE2 ground-monitor input with pull-up.
+  // pinMode() rewrites PINCFG (clearing PMUXEN, setting INEN|PULLEN), does
+  // DIRCLR, and drives OUT high for the pull-up — exactly DigitalPin INP_PU.
+  pinMode(GMI_ADC_PIN, INPUT_PULLUP);
+}
+#endif // RELAY_ZC_SWITCH
+
+
 void DigitalPin::init(uint32_t pinnum,int idxjunk,PinMode mode)
 {
   _pinNum = pinnum;

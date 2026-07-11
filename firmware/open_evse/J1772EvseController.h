@@ -87,7 +87,7 @@ typedef uint8_t (*EvseStateTransitionReqFunc)(uint8_t prevPilotState,uint8_t cur
 #define ECF_TEMP_CHK_DISABLED  0x0400 // no Temperature Monitoring
 #define ECF_CGMI               0x1000 // continuous GMI
 #define ECF_BOOT_LOCK_DISABLED 0x2000 // boot lock
-#define ECF_OVERCURRENT_DISABLED 0x0400 // disable overcurrent check
+#define ECF_OVERCURRENT_DISABLED 0x4000 // disable overcurrent check
 #define ECF_BUTTON_DISABLED    0x8000 // front panel button disabled
 #define ECF_RELAY_ZC_DISABLED  0x0800 // disable zero-crossing relay switching
 #define ECF_DEFAULT            0x0000
@@ -155,9 +155,6 @@ class J1772EVSEController {
 #endif
 #ifdef VOLTMETER_PIN
   AdcPin adcVoltMeter;
-#endif
-#if defined(RELAY_ZC_SWITCH) && defined(TARGET_SAMD)
-  AdcPin adcGmi;  // GMI_LINE (PA09) analog signal for voltage ZC detection
 #endif
 
 #ifdef CHARGING_REG
