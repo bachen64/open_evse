@@ -347,7 +347,12 @@ extern AutoCurrentCapacityController g_ACCController;
 #define RELAY_OPEN_ADVANCE_MS       2  // ms before voltage ZC to de-energize relay coil
 #define ZC_DETECT_TIMEOUT_MS       35  // > one full AC cycle (50 Hz = 20 ms)
 #define AC_ZC_HALF_PERIOD_MS        8  // conservative half-period (works 50 & 60 Hz)
-#define CURRENT_ZERO_THRESHOLD_MA 100  // mA; current below this = safe to open relay (0.1 A)
+// mA; current below this = safe to open the relay. Must sit above the reading
+// floor of the default calibration: with the SAMD defaults (scale 37, offset
+// -135) an idle ammeter computes 135 mA, so 100 could never be reached and the
+// wait always ran to the timeout. 0.2 A is still far below any level the
+// contacts care about.
+#define CURRENT_ZERO_THRESHOLD_MA 200
 #define CURRENT_ZERO_TIMEOUT_MS  1000  // ms; give up waiting for zero and open the relay anyway
 #endif // RELAY_ZC_SWITCH
 
