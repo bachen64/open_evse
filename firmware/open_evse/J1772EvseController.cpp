@@ -1648,7 +1648,6 @@ void J1772EVSEController::Update(uint8_t forcetransition)
 	m_GfiTripCnt++;
 	eeprom_write_byte((uint8_t*)EOFS_GFI_TRIP_CNT,m_GfiTripCnt);
       }
-      m_GfiRetryCnt = 0;
       m_GfiFaultStartMs = curms;
     }
     else { // was already in GFI fault
